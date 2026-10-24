@@ -25,6 +25,9 @@ Abre http://localhost:5180
   (`supabase/migrations/…_solo_chipsfinder.sql`) rechaza cualquier otro correo, aunque se cree
   desde el panel de Supabase.
 - Contraseña mínima de 8 caracteres.
+- La sesión se mantiene activa hasta **7 días** sin volver a entrar (`jwt_expiry` en Supabase), y se
+  renueva sola mientras se use. Al abrir, se entra con la sesión guardada y la cuenta se comprueba en
+  segundo plano: solo se cierra la sesión si la cuenta se ha borrado o desactivado, nunca por un fallo de red.
 - "Mantener la sesión en este equipo": si está desmarcado, la sesión se borra al cerrar el navegador.
 - Una cuenta desactivada se expulsa en cuanto se recarga la página.
 - El permiso que se ve en "Sesión iniciada" sale de `app_metadata.role` (`ADMIN` o `EQUIPO`).

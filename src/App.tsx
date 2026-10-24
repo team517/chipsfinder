@@ -18,6 +18,7 @@ import {
   ssoEnabled,
   supabase,
   validateLogin,
+  verifyActiveAccount,
   verifyEmailLink,
   type LinkType,
   type LoginError,
@@ -84,12 +85,12 @@ function boot(): Promise<Boot> {
     // Si el enlace no vale pero ya había sesión abierta, se sigue dentro.
     const s = await getSession();
     if (!s) return { view: "login", session: null, linkType: "recovery", error: linkError };
-    // Confirma con el servidor que la cuenta sigue activa.
-    const { data, error } = await supabase.auth.getUser();
-    if (error || !data.user) {
-      await signOut();
-      return { view: "login", session: null, linkType: "recovery", error: linkError };
-    }
+    // Entramos ya con la sesión guardada y comprobamos la cuenta en segundo plano:
+    // solo se cierra la sesión si la cuenta ya no es válida, nunca por un fallo de red.
+    void (async () => {
+      const state = await verifyActiveAccount();
+      if (state === "invalid") await signOut();
+    })();
     return { view: "done", session: s, linkType: "recovery", error: null };
   })();
   return bootPromise;

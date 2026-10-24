@@ -188,6 +188,22 @@ export function hasStoredSession(): boolean {
   return !!sessionStore.getItem("chf-auth");
 }
 
+/**
+ * Comprueba con el servidor si la cuenta sigue siendo válida.
+ * "ok" = sigue activa · "invalid" = cuenta borrada/desactivada (hay que salir)
+ * · "unknown" = no se pudo saber (sin red, servidor caído): NO se cierra la sesión.
+ */
+export async function verifyActiveAccount(): Promise<"ok" | "invalid" | "unknown"> {
+  const { data, error } = await supabase.auth.getUser();
+  if (data?.user) return "ok";
+  if (error) {
+    const status = (error as AuthError).status ?? 0;
+    if (status === 401 || status === 403) return "invalid";
+    return "unknown"; // fallo de red o del servidor: mantenemos la sesión
+  }
+  return "invalid";
+}
+
 /** Cambia la contraseña del usuario que ya tiene la sesión abierta ("Mi cuenta"). */
 export async function changePassword(password: string): Promise<Result> {
   const { error } = await supabase.auth.updateUser({ password });
