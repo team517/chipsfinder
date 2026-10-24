@@ -73,17 +73,289 @@ type OfertaFull = Oferta & {
   pedido: { id: string; cliente_id: string; unidades: string | null; cliente: { nombre: string } | null } | null;
 };
 
+/*
+ * Rutas dentro de Proveedores (un solo segmento en la URL):
+ *   (nada)          → empresas cliente
+ *   c~<cliente>     → referencias que pide ese cliente
+ *   c~<cliente>~<pedido> → proveedores de esa referencia
+ *   dir             → directorio de proveedores
+ *   p~<proveedor>   → ficha de un proveedor
+ */
 export default function Proveedores({ lang, isAdmin, openId, onOpen, onOpenClient, onChanged }: {
   lang: Lang; isAdmin: boolean; openId: string | null; onOpen: (id: string | null) => void; onOpenClient: (id: string) => void; onChanged: () => void;
 }) {
-  return openId && openId !== "nuevo" ? (
-    <ProvDetail key={openId} lang={lang} isAdmin={isAdmin} id={openId} onBack={() => onOpen(null)} onOpenClient={onOpenClient} onChanged={onChanged} />
-  ) : (
-    <ProvGrid lang={lang} startNew={openId === "nuevo"} onOpen={onOpen} onChanged={onChanged} />
+  const parts = (openId ?? "").split("~");
+  const openProv = (id: string) => onOpen("p~" + id);
+  if (parts[0] === "c" && parts[1] && parts[2])
+    return <RefSuppliers key={openId} lang={lang} pedidoId={parts[2]} onBack={() => onOpen("c~" + parts[1])} onOpenProv={openProv} onChanged={onChanged} />;
+  if (parts[0] === "c" && parts[1])
+    return <ClientRefs key={openId} lang={lang} clienteId={parts[1]} onBack={() => onOpen(null)} onOpenRef={(pid) => onOpen("c~" + parts[1] + "~" + pid)} onOpenClient={onOpenClient} />;
+  if (parts[0] === "dir")
+    return <ProvGrid lang={lang} startNew={false} onBack={() => onOpen(null)} onOpen={(id) => (id ? openProv(id) : onOpen("dir"))} onChanged={onChanged} />;
+  if (parts[0] === "p" && parts[1])
+    return <ProvDetail key={openId} lang={lang} isAdmin={isAdmin} id={parts[1]} onBack={() => onOpen("dir")} onOpenClient={onOpenClient} onChanged={onChanged} />;
+  if (openId && /^[0-9a-f-]{36}$/.test(openId))
+    return <ProvDetail key={openId} lang={lang} isAdmin={isAdmin} id={openId} onBack={() => onOpen("dir")} onOpenClient={onOpenClient} onChanged={onChanged} />;
+  return <ClientGrid lang={lang} onOpen={(cid) => onOpen("c~" + cid)} onDirectory={() => onOpen("dir")} />;
+}
+
+/* ---------- 1. Empresas cliente ---------- */
+
+const K = {
+  eyebrow: ["Proveedores por cliente", "Suppliers by client"] as Tr,
+  intro: ["Elige la empresa que te pide los chips, luego la referencia, y dentro verás sus proveedores.", "Pick the company asking for chips, then the part, and inside you'll see its suppliers."] as Tr,
+  directory: ["Directorio de proveedores", "Supplier directory"] as Tr,
+  search: ["Buscar empresa…", "Search company…"] as Tr,
+  count: (n: number): Tr => [n === 1 ? "1 empresa" : n + " empresas", n === 1 ? "1 company" : n + " companies"],
+  empty: ["Todavía no hay clientes con pedidos.", "No clients with orders yet."] as Tr,
+  refs: ["referencias", "parts"] as Tr,
+  sups: ["proveedores", "suppliers"] as Tr,
+  noSup: ["sin proveedor", "no supplier"] as Tr,
+  back: ["Empresas", "Companies"] as Tr,
+  client: ["Cliente", "Client"] as Tr,
+  partsOf: ["Referencias que pide", "Parts requested"] as Tr,
+  colRef: ["Referencia", "Part"] as Tr,
+  colUnits: ["Unidades", "Units"] as Tr,
+  colSup: ["Proveedores", "Suppliers"] as Tr,
+  colStatus: ["Estado", "Status"] as Tr,
+  colBest: ["Mejor precio", "Best price"] as Tr,
+  noParts: ["Este cliente aún no tiene referencias.", "This client has no parts yet."] as Tr,
+  viewOrder: ["Ver en Pedidos", "View in Orders"] as Tr,
+  suppliersOf: ["Proveedores de esta referencia", "Suppliers for this part"] as Tr,
+  assign: ["Asignar proveedor", "Assign supplier"] as Tr,
+  none: ["Aún no tiene proveedores. Asigna uno.", "No suppliers yet. Assign one."] as Tr,
+  colProv: ["Proveedor", "Supplier"] as Tr,
+  colContact: ["Contacto", "Contact"] as Tr,
+  colPrice: ["Precio", "Price"] as Tr,
+  colAvail: ["Disponibilidad", "Availability"] as Tr,
+  chosen: ["elegido", "chosen"] as Tr,
+};
+
+const ESTADO_ORDER = ["oferta", "respondido", "contactado", "por_contactar", "descartado"];
+
+type OfMini = { id: string; proveedor_id: string | null; estado: string; precio: number | null; moneda: string };
+type ClienteCard = { id: string; nombre: string; pais: string | null; email: string | null; contacto: string | null; pedidos: { id: string; ofertas: OfMini[] }[] };
+
+function ClientGrid({ lang, onOpen, onDirectory }: { lang: Lang; onOpen: (id: string) => void; onDirectory: () => void }) {
+  const [rows, setRows] = useState<ClienteCard[] | null>(null);
+  const [q, setQ] = useState("");
+  useEffect(() => {
+    supabase.from("clientes").select("id, nombre, pais, email, contacto, pedidos(id, ofertas(id, proveedor_id, estado, precio, moneda))").order("nombre").limit(5000)
+      .then(({ data }) => setRows(((data ?? []) as unknown as ClienteCard[]).filter((c) => c.pedidos.length > 0)));
+  }, []);
+  const filtered = useMemo(() => {
+    const n = q.trim().toLowerCase();
+    return (rows ?? []).filter((r) => !n || [r.nombre, r.email, r.pais, r.contacto].some((v) => (v ?? "").toLowerCase().includes(n)));
+  }, [rows, q]);
+
+  return (
+    <section className="page-sec">
+      <header className="sec-head">
+        <div className="sec-head__text">
+          <span className="sec-eyebrow"><span className="sec-eyebrow__code">03</span>{tr(K.eyebrow, lang)}</span>
+          <h1 className="sec-title">{tr(C.title, lang)}</h1>
+          <p className="sec-intro">{tr(K.intro, lang)}</p>
+        </div>
+        <button type="button" className="btn btn--ghost btn--new" onClick={onDirectory}>{tr(K.directory, lang)} →</button>
+      </header>
+      <div className="toolbar">
+        <label className="search">
+          <span className="sr-only">{tr(K.search, lang)}</span>
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" strokeWidth="1.5" /><path d="M11 11l3.5 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+          <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={tr(K.search, lang)} className="search__input" />
+        </label>
+        {rows && <span className="toolbar__count">{tr(K.count(filtered.length), lang)}</span>}
+      </div>
+      {rows === null ? (
+        <div className="state">{tr(C.loading, lang)}</div>
+      ) : filtered.length === 0 ? (
+        <div className="state state--empty"><span className="state__code">03</span><p className="state__text">{tr(K.empty, lang)}</p></div>
+      ) : (
+        <div className="client-grid">
+          {filtered.map((c) => {
+            const sups = new Set(c.pedidos.flatMap((p) => p.ofertas.filter((o) => o.estado !== "descartado").map((o) => o.proveedor_id)).filter(Boolean)).size;
+            const sinProv = c.pedidos.filter((p) => !p.ofertas.some((o) => o.estado !== "descartado")).length;
+            return (
+              <button key={c.id} type="button" className="client-card" onClick={() => onOpen(c.id)}>
+                <div className="client-card__top">
+                  <span className="client-card__avatar" aria-hidden="true">{c.nombre.slice(0, 1).toUpperCase()}</span>
+                  <span className="client-card__name">{c.nombre}</span>
+                </div>
+                <span className="client-card__meta">{[c.pais, c.contacto, c.email].filter(Boolean).join(" · ") || "—"}</span>
+                <div className="client-card__stats">
+                  <span className="cstat"><b>{num(c.pedidos.length, lang)}</b> {tr(K.refs, lang)}</span>
+                  <span className="cstat"><b>{num(sups, lang)}</b> {tr(K.sups, lang)}</span>
+                  {sinProv > 0 && <span className="cstat cstat--open"><b>{num(sinProv, lang)}</b> {tr(K.noSup, lang)}</span>}
+                  <span className="client-card__arrow" aria-hidden="true">→</span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }
 
-function ProvGrid({ lang, startNew, onOpen, onChanged }: { lang: Lang; startNew: boolean; onOpen: (id: string | null) => void; onChanged: () => void }) {
+/* ---------- 2. Referencias de un cliente ---------- */
+
+type PedRow = {
+  id: string; mpn: string | null; descripcion: string | null; unidades: string | null;
+  referencia: { mpn: string; fabricante: string | null; descripcion: string | null } | null; ofertas: OfMini[];
+};
+
+function ClientRefs({ lang, clienteId, onBack, onOpenRef, onOpenClient }: {
+  lang: Lang; clienteId: string; onBack: () => void; onOpenRef: (pedidoId: string) => void; onOpenClient: (id: string) => void;
+}) {
+  const [cli, setCli] = useState<{ nombre: string; pais: string | null; contacto: string | null; email: string | null } | null>(null);
+  const [peds, setPeds] = useState<PedRow[] | null>(null);
+  useEffect(() => {
+    Promise.all([
+      supabase.from("clientes").select("nombre, pais, contacto, email").eq("id", clienteId).single(),
+      supabase.from("pedidos").select("id, mpn, descripcion, unidades, referencia:referencias(mpn, fabricante, descripcion), ofertas(id, proveedor_id, estado, precio, moneda)").eq("cliente_id", clienteId).order("mpn").limit(2000),
+    ]).then(([c, p]) => { setCli(c.data as typeof cli); setPeds((p.data ?? []) as unknown as PedRow[]); });
+  }, [clienteId]);
+
+  if (!cli || peds === null) return <div className="state" style={{ marginTop: 24 }}>{tr(C.loading, lang)}</div>;
+
+  return (
+    <section className="page-sec">
+      <button type="button" className="backlink" onClick={onBack}>← {tr(K.back, lang)}</button>
+      <header className="sec-head">
+        <div className="sec-head__text">
+          <span className="sec-eyebrow"><span className="sec-eyebrow__code">03</span>{tr(K.client, lang)}</span>
+          <h1 className="sec-title">{cli.nombre}</h1>
+          <p className="sec-intro">{[cli.pais, cli.contacto, cli.email].filter(Boolean).join(" · ")}</p>
+        </div>
+        <button type="button" className="btn btn--ghost btn--sm" onClick={() => onOpenClient(clienteId)}>{tr(K.viewOrder, lang)} →</button>
+      </header>
+      <div className="offers offers--card">
+        <div className="offers__head"><span className="offers__title">{tr(K.partsOf, lang)} · {peds.length}</span></div>
+        {peds.length === 0 ? <p className="offers__empty">{tr(K.noParts, lang)}</p> : (
+          <div className="table-wrap table-wrap--flat">
+            <table className="tbl">
+              <thead><tr>
+                <th>{tr(K.colRef, lang)}</th>
+                <th className="is-optional">{tr(K.colUnits, lang)}</th>
+                <th>{tr(K.colSup, lang)}</th>
+                <th className="is-optional">{tr(K.colStatus, lang)}</th>
+                <th className="is-right">{tr(K.colBest, lang)}</th>
+              </tr></thead>
+              <tbody>
+                {peds.map((p) => {
+                  const live = p.ofertas.filter((o) => o.estado !== "descartado");
+                  const top = [...p.ofertas].sort((a, b) => ESTADO_ORDER.indexOf(a.estado) - ESTADO_ORDER.indexOf(b.estado))[0];
+                  const eur = live.filter((o) => o.precio != null && o.moneda === "EUR").sort((a, b) => Number(a.precio) - Number(b.precio));
+                  const best = eur[0] ?? live.find((o) => o.precio != null);
+                  return (
+                    <tr key={p.id} tabIndex={0} onClick={() => onOpenRef(p.id)} onKeyDown={(e) => { if (e.key === "Enter") onOpenRef(p.id); }}>
+                      <td data-label={tr(K.colRef, lang)} className="is-strong">
+                        <span className="ref-mpn">{text(p.referencia?.mpn ?? p.mpn)}</span>
+                        <span className="ref-desc">{[p.referencia?.fabricante, p.descripcion ?? p.referencia?.descripcion].filter(Boolean).join(" · ")}</span>
+                      </td>
+                      <td data-label={tr(K.colUnits, lang)} className="is-optional">{text(p.unidades)}</td>
+                      <td data-label={tr(K.colSup, lang)}>{live.length ? num(live.length, lang) : <span className="pill pill--warn">{tr(K.noSup, lang)}</span>}</td>
+                      <td data-label={tr(K.colStatus, lang)} className="is-optional">{top ? <EstadoPill estado={top.estado} lang={lang} /> : "—"}</td>
+                      <td data-label={tr(K.colBest, lang)} className="is-right is-mono">{best ? moneyCur(best.precio, best.moneda, lang) : "—"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/* ---------- 3. Proveedores de una referencia ---------- */
+
+type OfProv = Oferta & { prov: { id: string; nombre: string; email: string | null; web: string | null; pais: string | null; telefono: string | null } | null };
+
+function RefSuppliers({ lang, pedidoId, onBack, onOpenProv, onChanged }: {
+  lang: Lang; pedidoId: string; onBack: () => void; onOpenProv: (id: string) => void; onChanged: () => void;
+}) {
+  const [ped, setPed] = useState<{ mpn: string | null; descripcion: string | null; unidades: string | null; notas: string | null; cliente: { nombre: string } | null; referencia: { mpn: string; fabricante: string | null } | null } | null>(null);
+  const [ofs, setOfs] = useState<OfProv[] | null>(null);
+  const [offer, setOffer] = useState<OfProv | "new" | null>(null);
+
+  const load = useCallback(async () => {
+    const [p, o] = await Promise.all([
+      supabase.from("pedidos").select("mpn, descripcion, unidades, notas, cliente:clientes(nombre), referencia:referencias(mpn, fabricante)").eq("id", pedidoId).single(),
+      supabase.from("ofertas").select("*, prov:proveedores(id, nombre, email, web, pais, telefono)").eq("pedido_id", pedidoId).limit(500),
+    ]);
+    setPed(p.data as unknown as typeof ped);
+    setOfs(((o.data ?? []) as unknown as OfProv[]).sort((a, b) => ESTADO_ORDER.indexOf(a.estado) - ESTADO_ORDER.indexOf(b.estado)));
+  }, [pedidoId]);
+  useEffect(() => { load(); }, [load]);
+
+  if (!ped || ofs === null) return <div className="state" style={{ marginTop: 24 }}>{tr(C.loading, lang)}</div>;
+
+  return (
+    <section className="page-sec">
+      <button type="button" className="backlink" onClick={onBack}>← {ped.cliente?.nombre ?? tr(K.back, lang)}</button>
+      <header className="sec-head">
+        <div className="sec-head__text">
+          <span className="sec-eyebrow"><span className="sec-eyebrow__code">03</span>{ped.cliente?.nombre}{ped.unidades ? " · " + ped.unidades : ""}</span>
+          <h1 className="sec-title is-mono">{text(ped.referencia?.mpn ?? ped.mpn)}</h1>
+          <p className="sec-intro">{[ped.referencia?.fabricante, ped.descripcion].filter(Boolean).join(" · ")}</p>
+        </div>
+      </header>
+      {ped.notas && <p className="item__notes"><span className="note__tag">INT</span> {ped.notas}</p>}
+      <div className="offers offers--card">
+        <div className="offers__head">
+          <span className="offers__title">{tr(K.suppliersOf, lang)} · {ofs.length}</span>
+          <button type="button" className="linkbtn" onClick={() => setOffer("new")}>+ {tr(K.assign, lang)}</button>
+        </div>
+        {ofs.length === 0 ? <p className="offers__empty">{tr(K.none, lang)}</p> : (
+          <div className="table-wrap table-wrap--flat">
+            <table className="tbl">
+              <thead><tr>
+                <th>{tr(K.colProv, lang)}</th>
+                <th>{tr(K.colContact, lang)}</th>
+                <th className="is-right">{tr(K.colPrice, lang)}</th>
+                <th className="is-optional">{tr(K.colAvail, lang)}</th>
+                <th>{tr(K.colStatus, lang)}</th>
+              </tr></thead>
+              <tbody>
+                {ofs.map((o) => {
+                  const name = o.prov?.nombre ?? o.proveedor ?? "—";
+                  const email = o.prov?.email ?? o.email;
+                  const web = o.prov?.web ?? o.enlace;
+                  return (
+                    <tr key={o.id} tabIndex={0} onClick={() => setOffer(o)} onKeyDown={(e) => { if (e.key === "Enter") setOffer(o); }}>
+                      <td data-label={tr(K.colProv, lang)} className="is-strong">
+                        {o.proveedor_id ? <button type="button" className="linkbtn" onClick={(e) => { e.stopPropagation(); onOpenProv(o.proveedor_id!); }}>{name} →</button> : name}
+                        <span className="ref-desc">{[o.prov?.pais ?? o.pais, o.elegida ? "★ " + tr(K.chosen, lang) : null, o.notas].filter(Boolean).join(" · ")}</span>
+                      </td>
+                      <td data-label={tr(K.colContact, lang)}>
+                        {email && <a className="ref-link" href={"mailto:" + email} onClick={(e) => e.stopPropagation()}>{email}</a>}
+                        {web && <a className="ref-link ref-desc" href={webHref(web)} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>{web.replace(/^https?:\/\//, "").slice(0, 40)}</a>}
+                        {!email && !web && "—"}
+                      </td>
+                      <td data-label={tr(K.colPrice, lang)} className="is-right is-mono">{moneyCur(o.precio, o.moneda, lang)}</td>
+                      <td data-label={tr(K.colAvail, lang)} className="is-optional">{text(o.disponibilidad)}</td>
+                      <td data-label={tr(K.colStatus, lang)}><EstadoPill estado={o.estado} lang={lang} /></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+      {offer && (
+        <OfferEditor lang={lang} pedidoId={pedidoId} oferta={offer === "new" ? null : offer}
+          onClose={() => setOffer(null)} onSaved={() => { setOffer(null); load(); onChanged(); }} />
+      )}
+    </section>
+  );
+}
+
+/* ---------- Directorio de proveedores ---------- */
+
+function ProvGrid({ lang, startNew, onBack, onOpen, onChanged }: { lang: Lang; startNew: boolean; onBack: () => void; onOpen: (id: string | null) => void; onChanged: () => void }) {
   const [rows, setRows] = useState<ProvResumen[] | null>(null);
   const [q, setQ] = useState("");
   const [creating, setCreating] = useState(startNew);
@@ -101,9 +373,10 @@ function ProvGrid({ lang, startNew, onOpen, onChanged }: { lang: Lang; startNew:
 
   return (
     <section className="page-sec">
+      <button type="button" className="backlink" onClick={onBack}>← {tr(K.back, lang)}</button>
       <header className="sec-head">
         <div className="sec-head__text">
-          <span className="sec-eyebrow"><span className="sec-eyebrow__code">03</span>{tr(C.eyebrow, lang)}</span>
+          <span className="sec-eyebrow"><span className="sec-eyebrow__code">03</span>{tr(K.directory, lang)}</span>
           <h1 className="sec-title">{tr(C.title, lang)}</h1>
           <p className="sec-intro">{tr(C.intro, lang)}</p>
         </div>

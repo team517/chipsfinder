@@ -2243,3 +2243,5 @@ a.contact-chip:hover { border-color: var(--line-strong); color: var(--ink); }
 }
 .offers--card .tbl tbody tr { cursor: pointer; }
 .offer__avail .pill { margin-right: 4px; vertical-align: 1px; }
+.ref-link { display: block; color: var(--ink-2); text-decoration: none; font-size: 13px; overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
+.ref-link:hover { color: var(--accent); }
