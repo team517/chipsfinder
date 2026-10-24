@@ -152,18 +152,23 @@ Deno.serve(async (req) => {
         const langName = lang === "es" ? "Spanish (Spain)" : "English";
         let system: string, user: string;
         if (body.task === "translate") {
-          system = `You translate business emails into ${langName}. Keep the exact structure: greeting, paragraphs, bullet and numbered lists, line breaks and the signature block (names, company, email, web stay unchanged). Natural, professional tone. Reply only with JSON {"subject": string, "body": string}; body is plain text.`;
+          system = `You translate business emails into ${langName}. Keep the exact structure: greeting, paragraphs, bullet and numbered lists, line breaks, sign-off and the signature block (company, email, web stay unchanged; translate a generic team name like \"Sourcing Team\" ↔ \"Equipo de compras\"). Adapt units and number format (pcs ↔ uds., 1,000 ↔ 1.000). In Spanish use \"Solicitud de oferta\" for RFQ. Natural, professional tone. Reply only with JSON {"subject": string, "body": string}; body is plain text.`;
           user = JSON.stringify({ subject: String(body.subject ?? ""), body: String(body.body ?? "") });
         } else {
+          const W = lang === "es"
+            ? { greet: "Estimado equipo de <proveedor>:", qty: "1.000 uds. (mín.)", ask: "¿Podrían indicarnos, por favor?", bye: "Un saludo,", subj: "Solicitud de oferta – <MPN> – <cantidad> uds." }
+            : { greet: "Dear <supplier> team,", qty: "1,000 pcs (min.)", ask: "Could you please confirm the following:", bye: "Best regards,", subj: "RFQ – <MPN> – <qty> pcs" };
           system = [
-            `You write purchase enquiry (RFQ) emails in ${langName} for ChipsFinder, an electronic components sourcing company, to a supplier or distributor.`,
+            "You write purchase enquiry (RFQ) emails for ChipsFinder, an electronic components sourcing company, to a supplier or distributor.",
+            `Write the WHOLE email (subject and body) in ${langName}, even if the input data is in another language.`,
             "Structure, as plain text with blank lines between blocks:",
-            "1) Greeting (Dear <supplier> team, / Estimado equipo de <supplier>,). 2) One short polite line and one line saying we are sourcing this part for a customer.",
-            "3) Part details as a bullet list with • (part number, manufacturer, description if given, quantity).",
-            "4) A numbered list asking exactly the questions requested. 5) A short closing line thanking them and asking for their best offer.",
-            "6) The signature block exactly as provided.",
+            `1) Greeting: "${W.greet}". 2) One short polite line and one line saying we are sourcing this part for a customer.`,
+            `3) Part details as a bullet list with • (part number, manufacturer, description if given, quantity). Quantity format like "${W.qty}".`,
+            `4) The line "${W.ask}" followed by a numbered list asking exactly the questions requested (in ${langName}).`,
+            "5) A short closing line thanking them in advance and asking for their best offer.",
+            `6) "${W.bye}" on its own line, a blank line, then the signature block exactly as provided (translate only a generic team name).`,
             "Never mention the name of our customer. Be concise, warm and professional. No markdown, no asterisks.",
-            'Reply only with JSON {"subject": string, "body": string}. Subject like "RFQ – <MPN> – <qty> pcs" (Spanish: "Solicitud de oferta – <MPN> – <qty> uds.").',
+            `Reply only with JSON {"subject": string, "body": string}. Subject like "${W.subj}".`,
           ].join("\n");
           user = JSON.stringify({
             supplier: String(body.supplier ?? ""), part: body.part ?? {}, questions: Array.isArray(body.questions) ? body.questions : [],
