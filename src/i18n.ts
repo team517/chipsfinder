@@ -16,7 +16,7 @@ export type Copy = {
   forgotTitle: string;
   forgotSub: string;
   doneTitle: string;
-  doneSub: string;
+  doneSub: (email: string) => string;
   email: string;
   password: string;
   forgot: string;
@@ -39,6 +39,28 @@ export type Copy = {
   help: string;
   privacy: string;
   langLabel: string;
+  errCredentials: string;
+  errBanned: string;
+  errRate: string;
+  errNetwork: string;
+  errWeak: string;
+  errSame: string;
+  errMismatch: string;
+  errLink: string;
+  errSso: string;
+  errUnknown: string;
+  setTitle: string;
+  setSub: string;
+  inviteTitle: string;
+  inviteSub: string;
+  newPassword: string;
+  repeatPassword: string;
+  savePassword: string;
+  saving: string;
+  sending: string;
+  checkingTitle: string;
+  checkingSub: string;
+  roleTeam: string;
 };
 
 export const T: Record<Lang, Copy> = {
@@ -63,7 +85,7 @@ export const T: Record<Lang, Copy> = {
     forgotTitle: "Recuperar acceso",
     forgotSub: "Te enviamos un enlace para crear una contraseña nueva.",
     doneTitle: "Sesión iniciada",
-    doneSub: "Comprobaciones de seguridad superadas. Cargando el panel…",
+    doneSub: (e) => "Comprobaciones de seguridad superadas. Has entrado como " + e + ".",
     email: "Correo corporativo",
     password: "Contraseña",
     forgot: "¿La olvidaste?",
@@ -84,12 +106,34 @@ export const T: Record<Lang, Copy> = {
     checks: [
       { l: "Credenciales", v: "OK" },
       { l: "Dispositivo", v: "OK" },
-      { l: "Permisos", v: "ADMIN" },
+      { l: "Permisos", v: "" },
     ],
     logout: "Cerrar sesión",
     help: "¿Eres del equipo y no tienes acceso? Pídelo al administrador en",
     privacy: "Uso interno · Confidencial",
     langLabel: "Idioma",
+    errCredentials: "Correo o contraseña incorrectos.",
+    errBanned: "Esta cuenta está desactivada. Habla con el administrador.",
+    errRate: "Demasiados intentos. Espera unos minutos y vuelve a probar.",
+    errNetwork: "No se pudo conectar. Revisa tu conexión e inténtalo de nuevo.",
+    errWeak: "Esa contraseña es demasiado débil. Prueba con una más larga.",
+    errSame: "La contraseña nueva tiene que ser distinta de la anterior.",
+    errMismatch: "Las dos contraseñas no coinciden.",
+    errLink: "El enlace ha caducado o ya se usó. Pide uno nuevo.",
+    errSso: "No se pudo entrar con Microsoft.",
+    errUnknown: "Algo ha fallado. Inténtalo de nuevo.",
+    setTitle: "Nueva contraseña",
+    setSub: "Elige una contraseña nueva de al menos 8 caracteres.",
+    inviteTitle: "Crea tu contraseña",
+    inviteSub: "Ya tienes cuenta en el panel del equipo. Elige una contraseña de al menos 8 caracteres para entrar.",
+    newPassword: "Contraseña nueva",
+    repeatPassword: "Repite la contraseña",
+    savePassword: "Guardar y entrar",
+    saving: "Guardando…",
+    sending: "Enviando…",
+    checkingTitle: "Comprobando acceso",
+    checkingSub: "Un momento…",
+    roleTeam: "EQUIPO",
   },
   en: {
     badge: "Team only",
@@ -112,7 +156,7 @@ export const T: Record<Lang, Copy> = {
     forgotTitle: "Recover access",
     forgotSub: "We will send you a link to set a new password.",
     doneTitle: "Signed in",
-    doneSub: "Security checks passed. Loading the dashboard…",
+    doneSub: (e) => "Security checks passed. Signed in as " + e + ".",
     email: "Corporate email",
     password: "Password",
     forgot: "Forgot it?",
@@ -133,11 +177,33 @@ export const T: Record<Lang, Copy> = {
     checks: [
       { l: "Credentials", v: "OK" },
       { l: "Device", v: "OK" },
-      { l: "Permissions", v: "ADMIN" },
+      { l: "Permissions", v: "" },
     ],
     logout: "Sign out",
     help: "On the team but no access? Ask the administrator at",
     privacy: "Internal use · Confidential",
     langLabel: "Language",
+    errCredentials: "Wrong email or password.",
+    errBanned: "This account is disabled. Talk to the administrator.",
+    errRate: "Too many attempts. Wait a few minutes and try again.",
+    errNetwork: "Could not connect. Check your connection and try again.",
+    errWeak: "That password is too weak. Try a longer one.",
+    errSame: "The new password must be different from the old one.",
+    errMismatch: "The two passwords do not match.",
+    errLink: "This link has expired or was already used. Request a new one.",
+    errSso: "Could not sign in with Microsoft.",
+    errUnknown: "Something went wrong. Please try again.",
+    setTitle: "New password",
+    setSub: "Choose a new password of at least 8 characters.",
+    inviteTitle: "Create your password",
+    inviteSub: "You now have an account on the team dashboard. Choose a password of at least 8 characters to sign in.",
+    newPassword: "New password",
+    repeatPassword: "Repeat password",
+    savePassword: "Save and sign in",
+    saving: "Saving…",
+    sending: "Sending…",
+    checkingTitle: "Checking access",
+    checkingSub: "One moment…",
+    roleTeam: "TEAM",
   },
 };
