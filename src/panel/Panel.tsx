@@ -8,6 +8,7 @@ import EntityPage from "./EntityPage";
 import Home from "./Home";
 import TeamPage from "./TeamPage";
 import Account from "./Account";
+import Pedidos from "./Pedidos";
 import { listUsers } from "./team";
 import { tr, type Tr } from "./format";
 
@@ -262,6 +263,14 @@ export default function Panel({ session, onSignOut }: { session: Session; onSign
             <Account lang={lang} session={session} />
           ) : route.section === "equipo" ? (
             <TeamPage lang={lang} openId={route.id} onOpen={(id: string | null) => navigate({ section: "equipo", id }, true)} />
+          ) : route.section === "pedidos" ? (
+            <Pedidos
+              lang={lang}
+              isAdmin={isAdmin}
+              clienteId={route.id}
+              onOpen={(id: string | null) => navigate({ section: "pedidos", id }, true)}
+              onChanged={() => setRefreshKey((k) => k + 1)}
+            />
           ) : (
             <EntityPage
               entity={ENTITIES[route.section]}

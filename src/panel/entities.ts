@@ -204,6 +204,7 @@ export const ENTITIES: Record<EntityId, Entity> = {
       { key: "contacto", label: L.contacto, type: "text" },
       { key: "email", label: L.email, type: "email" },
       { key: "telefono", label: L.telefono, type: "tel" },
+      { key: "web", label: ["Web", "Website"], type: "text", wide: true, placeholder: "https://…" },
       { key: "notas", label: L.notas, type: "textarea", wide: true },
     ],
     columns: [

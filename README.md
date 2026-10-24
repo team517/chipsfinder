@@ -94,7 +94,7 @@ Al iniciar sesión se ve "Sesión iniciada · Cargando el panel…" y se entra a
 | Sección | Qué guarda | Tabla |
 | --- | --- | --- |
 | 00 Inicio | Resumen: pedidos abiertos, lotes por revisar, referencias y stock, clientes; últimos pedidos y lotes pendientes | — |
-| 01 Pedidos | Peticiones de clientes (PED-0001…), referencia, cantidad, precio objetivo, estado | `pedidos` |
+| 01 Pedidos | **Por cliente**: entras en Pedidos y ves la lista de clientes; al abrir uno ves sus artículos (referencia, unidades, objetivo del cliente, precio que damos) y, bajo cada artículo, los **proveedores** con precio, email, enlace, país, disponibilidad y margen | `pedidos` + `ofertas` |
 | 02 Lotes | Material que entra: proveedor, date code, inspección (pendiente / en inspección / aprobado / rechazado) | `lotes` |
 | 03 Referencias | Catálogo: MPN, fabricante, encapsulado, stock, precio, ubicación | `referencias` |
 | 04 Proveedores | Fabricantes, distribuidores y brokers, con valoración | `proveedores` |
@@ -106,6 +106,8 @@ Al iniciar sesión se ve "Sesión iniciada · Cargando el panel…" y se entra a
 - Leer, crear y editar: cualquier cuenta @chipsfinder.es. **Borrar: solo administradores.**
   Lo controla la base de datos (RLS), no solo la pantalla.
 - No se puede borrar un cliente que tiene pedidos.
+- Al añadir un artículo o una oferta en Pedidos, la **referencia** y el **proveedor** se crean solos
+  en sus secciones si no existían. Cada artículo guarda varias ofertas de proveedores y se marca el elegido.
 - Cada registro tiene su propia dirección (`/panel/pedidos/<id>`), que se puede compartir con el equipo.
 - En móvil el menú se abre con "Menú" y las tablas pasan a tarjetas.
 - Tablas y permisos: `supabase/migrations/20261024130000_panel.sql`.
