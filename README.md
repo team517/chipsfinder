@@ -99,6 +99,7 @@ Al iniciar sesión se ve "Sesión iniciada · Cargando el panel…" y se entra a
 | 03 Referencias | Catálogo: MPN, fabricante, encapsulado, stock, precio, ubicación | `referencias` |
 | 04 Proveedores | Fabricantes, distribuidores y brokers, con valoración | `proveedores` |
 | 05 Clientes | Empresas, contacto y número de pedidos | `clientes` |
+| Unibox | Correo del equipo por Gmail (IMAP/SMTP): bandeja con hilos, lee correos con imágenes, responde en el mismo hilo, identifica el cliente por el dominio | `mensajes` + función `mail` |
 | 06 Equipo (solo admin) | Dar de alta accesos, cambiar el rol, activar/desactivar y borrar cuentas | Supabase Auth |
 | Mi cuenta | Cada persona cambia su propia contraseña | Supabase Auth |
 
@@ -114,6 +115,23 @@ Al iniciar sesión se ve "Sesión iniciada · Cargando el panel…" y se entra a
 
 Al publicarlo, el servidor tiene que devolver `index.html` para cualquier ruta `/panel/...`
 (lo normal en una app de una sola página).
+
+## Unibox (correo de Gmail)
+
+Correo del equipo por **IMAP/SMTP** con una **contraseña de aplicación** de Gmail. La contraseña se
+guarda solo en el servidor (tabla `mail_config`, sin acceso desde el navegador) y la usa la Edge
+Function `supabase/functions/mail` (IMAP con `imapflow`, parseo con `mailparser`, envío con `nodemailer`).
+
+- **Conectar:** un administrador entra en Unibox y pega el correo y la contraseña de aplicación.
+  Para crearla: cuenta de Google → Seguridad → Verificación en dos pasos → Contraseñas de aplicaciones → "Correo".
+- **Sincroniza** la bandeja de entrada y enviados; guarda los correos en `mensajes` (con imágenes
+  incrustadas y adjuntos listados), identifica el cliente por el **dominio** del remitente
+  (`clientes.dominio` o el dominio de su email).
+- **Responder** envía por SMTP en el **mismo hilo** (In-Reply-To/References) y guarda el enviado.
+- Deploy de la función: `supabase functions deploy mail --project-ref vwybcwidffcnpcjlehxv --use-api`
+
+Pendiente recomendable: un cron que sincronice cada pocos minutos (ahora se sincroniza al abrir y con
+el botón «Sincronizar»).
 
 ## Ajustes del diseño
 

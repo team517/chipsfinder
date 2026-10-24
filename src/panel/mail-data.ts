@@ -1,0 +1,126 @@
+// Datos del Unibox: estado de la conexión, acciones (conectar/sincronizar/enviar)
+// y lectura de los correos guardados (con RLS del equipo).
+
+import { supabase } from "../auth";
+
+export type MailStatus = { connected: boolean; address: string | null; last_sync: string | null; last_error: string | null };
+
+export type Adjunto = { filename: string; contentType: string; size: number };
+
+export type Mensaje = {
+  id: string;
+  folder: string;
+  message_id: string | null;
+  thread_id: string | null;
+  in_reply_to: string | null;
+  referencias: string | null;
+  from_email: string | null;
+  from_name: string | null;
+  to_email: string | null;
+  cc: string | null;
+  subject: string | null;
+  fecha: string | null;
+  snippet: string | null;
+  body_html: string | null;
+  body_text: string | null;
+  adjuntos: Adjunto[];
+  seen: boolean;
+  direction: "in" | "out";
+  cliente_id: string | null;
+  cliente?: { nombre: string } | null;
+};
+
+export type Thread = {
+  thread_id: string;
+  subject: string;
+  last: Mensaje;
+  count: number;
+  unseen: number;
+  cliente_id: string | null;
+  cliente_nombre: string | null;
+  party_email: string;
+  party_name: string;
+};
+
+type Ok<T> = { ok: true } & T;
+type Err = { ok: false; error: string; detail?: string };
+
+async function call<T = Record<string, unknown>>(action: string, payload: Record<string, unknown> = {}): Promise<Ok<T> | Err> {
+  try {
+    const { data, error } = await supabase.functions.invoke("mail", { body: { action, ...payload } });
+    if (error) {
+      let code = "network", detail: string | undefined;
+      try {
+        const b = await (error as { context?: Response }).context?.json?.();
+        if (b?.error) { code = b.error; detail = b.detail; }
+      } catch { /* vacío */ }
+      return { ok: false, error: code, detail };
+    }
+    if (data && data.ok === false) return { ok: false, error: data.error ?? "unknown", detail: data.detail };
+    return { ok: true, ...(data as T) };
+  } catch {
+    return { ok: false, error: "network" };
+  }
+}
+
+export const mailStatus = () => call<MailStatus>("status");
+export const mailConnect = (address: string, app_password: string) => call("connect", { address, app_password });
+export const mailDisconnect = () => call("disconnect");
+export const mailSync = (limit = 60) => call<{ nuevos: number }>("sync", { limit });
+export const mailSend = (p: {
+  to: string; subject: string; html: string; text?: string;
+  inReplyTo?: string; references?: string; threadId?: string; clienteId?: string;
+}) => call<{ messageId: string }>("send", p);
+
+function partyOf(m: Mensaje): { email: string; name: string } {
+  if (m.direction === "out") return { email: m.to_email ?? "", name: m.to_email ?? "" };
+  return { email: m.from_email ?? "", name: m.from_name || m.from_email || "" };
+}
+
+export async function fetchThreads(): Promise<{ ok: boolean; threads: Thread[] }> {
+  const { data, error } = await supabase
+    .from("mensajes")
+    .select("*, cliente:clientes(nombre)")
+    .order("fecha", { ascending: false })
+    .limit(600);
+  if (error) return { ok: false, threads: [] };
+  const msgs = (data ?? []) as unknown as Mensaje[];
+  const map = new Map<string, Thread>();
+  for (const m of msgs) {
+    const key = m.thread_id || m.id;
+    let t = map.get(key);
+    if (!t) {
+      const p = partyOf(m);
+      t = {
+        thread_id: key, subject: m.subject || "(sin asunto)", last: m, count: 0, unseen: 0,
+        cliente_id: m.cliente_id, cliente_nombre: m.cliente?.nombre ?? null,
+        party_email: p.email, party_name: p.name,
+      };
+      map.set(key, t);
+    }
+    t.count += 1;
+    if (!m.seen && m.direction === "in") t.unseen += 1;
+    if (m.cliente_id && !t.cliente_id) { t.cliente_id = m.cliente_id; t.cliente_nombre = m.cliente?.nombre ?? null; }
+    // el "último" ya es el primero por orden desc; actualiza party con el correo entrante más reciente
+    if (m.direction === "in" && (!t.party_email || t.last.direction === "out")) {
+      const p = partyOf(m);
+      t.party_email = p.email; t.party_name = p.name;
+    }
+  }
+  return { ok: true, threads: [...map.values()] };
+}
+
+export async function fetchThread(threadId: string): Promise<{ ok: boolean; mensajes: Mensaje[] }> {
+  const { data, error } = await supabase
+    .from("mensajes")
+    .select("*, cliente:clientes(nombre)")
+    .or(`thread_id.eq.${threadId},id.eq.${threadId}`)
+    .order("fecha", { ascending: true })
+    .limit(500);
+  if (error) return { ok: false, mensajes: [] };
+  return { ok: true, mensajes: (data ?? []) as unknown as Mensaje[] };
+}
+
+export async function markThreadSeen(threadId: string) {
+  await supabase.from("mensajes").update({ seen: true }).eq("thread_id", threadId).eq("direction", "in").eq("seen", false);
+}

@@ -9,6 +9,7 @@ import Home from "./Home";
 import TeamPage from "./TeamPage";
 import Account from "./Account";
 import Pedidos from "./Pedidos";
+import Unibox from "./Unibox";
 import { listUsers } from "./team";
 import { tr, type Tr } from "./format";
 
@@ -22,16 +23,18 @@ const C = {
   lang: ["Idioma", "Language"] as Tr,
   main: ["Secciones", "Sections"] as Tr,
   adminGroup: ["Administración", "Administration"] as Tr,
+  comunicacion: ["Comunicación", "Comms"] as Tr,
+  unibox: ["Unibox", "Unibox"] as Tr,
   equipo: ["Equipo", "Team"] as Tr,
   account: ["Mi cuenta", "My account"] as Tr,
   openAccount: ["Ver mi cuenta", "View my account"] as Tr,
 };
 
-type PanelSection = SectionId | "equipo" | "cuenta";
+type PanelSection = SectionId | "unibox" | "equipo" | "cuenta";
 
-const EXTRA: Record<"equipo" | "cuenta", Tr> = { equipo: C.equipo, cuenta: C.account };
+const EXTRA: Record<"unibox" | "equipo" | "cuenta", Tr> = { unibox: C.unibox, equipo: C.equipo, cuenta: C.account };
 
-const RECOGNISED: PanelSection[] = ["inicio", "pedidos", "referencias", "proveedores", "clientes", "equipo", "cuenta"];
+const RECOGNISED: PanelSection[] = ["inicio", "pedidos", "unibox", "referencias", "proveedores", "clientes", "equipo", "cuenta"];
 
 type Route = { section: PanelSection; id: string | null };
 
@@ -48,10 +51,10 @@ function routePath(r: Route) {
 }
 
 function sectionTitle(s: PanelSection): Tr {
-  return s === "equipo" || s === "cuenta" ? EXTRA[s] : SECTION_TITLE[s];
+  return s === "unibox" || s === "equipo" || s === "cuenta" ? EXTRA[s] : SECTION_TITLE[s];
 }
 
-type Counts = Partial<Record<EntityId, number>> & { equipo?: number };
+type Counts = Partial<Record<EntityId, number>> & { equipo?: number; unibox?: number };
 
 export default function Panel({ session, onSignOut }: { session: Session; onSignOut: () => void }) {
   const [lang, setLangState] = useState<Lang>(initialLang);
@@ -110,6 +113,8 @@ export default function Panel({ session, onSignOut }: { session: Session; onSign
     ids.forEach((id, i) => {
       if (!res[i].error) next[id] = res[i].count ?? 0;
     });
+    const mail = await supabase.from("mensajes").select("id", { count: "exact", head: true }).eq("seen", false).eq("direction", "in");
+    if (!mail.error) next.unibox = mail.count ?? 0;
     if (isAdmin) {
       const u = await listUsers();
       if (u.ok) next.equipo = u.users.length;
@@ -166,6 +171,10 @@ export default function Panel({ session, onSignOut }: { session: Session; onSign
           </ul>
         </div>
       ))}
+      <div className="nav-group">
+        <span className="nav-group__label">{tr(C.comunicacion, lang)}</span>
+        <ul>{navItem("unibox", "✉", C.unibox, counts.unibox)}</ul>
+      </div>
       {isAdmin && (
         <div className="nav-group">
           <span className="nav-group__label">{tr(C.adminGroup, lang)}</span>
@@ -261,6 +270,8 @@ export default function Panel({ session, onSignOut }: { session: Session; onSign
             <Home lang={lang} name={name} refreshKey={refreshKey} go={(section, id) => navigate({ section, id: id ?? null })} />
           ) : route.section === "cuenta" ? (
             <Account lang={lang} session={session} />
+          ) : route.section === "unibox" ? (
+            <Unibox lang={lang} isAdmin={isAdmin} onOpenClient={(id) => navigate({ section: "pedidos", id })} />
           ) : route.section === "equipo" ? (
             <TeamPage lang={lang} openId={route.id} onOpen={(id: string | null) => navigate({ section: "equipo", id }, true)} />
           ) : route.section === "pedidos" ? (
