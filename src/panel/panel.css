@@ -2162,3 +2162,7 @@ select.input option {
 .search--sm .search__input {
   font-size: 13px;
 }
+
+.thread__confirm {
+  margin: 12px 18px 0;
+}

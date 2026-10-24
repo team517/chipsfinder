@@ -67,6 +67,9 @@ export const mailStatus = () => call<MailStatus>("status");
 export const mailConnect = (address: string, app_password: string) => call("connect", { address, app_password });
 export const mailDisconnect = () => call("disconnect");
 export const mailSync = (limit = 40) => call<{ nuevos: number; pending: number }>("sync", { limit });
+/** Borra correos (en Gmail van a la Papelera). */
+export const mailDelete = (ids: string[]) => call<{ deleted: number }>("delete", { ids });
+
 export const mailSend = (p: {
   to: string; subject: string; html: string; text?: string;
   inReplyTo?: string; references?: string; threadId?: string; clienteId?: string;

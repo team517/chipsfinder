@@ -5,6 +5,7 @@ import {
   fetchThread,
   fetchThreads,
   mailConnect,
+  mailDelete,
   mailDisconnect,
   mailSend,
   mailStatus,
@@ -41,6 +42,13 @@ const C = {
   cancel: ["Cancelar", "Cancel"] as Tr,
   close: ["Cerrar", "Close"] as Tr,
   retry: ["Reintentar", "Retry"] as Tr,
+  delThread: ["Borrar conversación", "Delete conversation"] as Tr,
+  delMsg: ["Borrar", "Delete"] as Tr,
+  delThreadQ: ["¿Borrar toda la conversación? En Gmail irá a la Papelera.", "Delete the whole conversation? In Gmail it goes to Trash."] as Tr,
+  delMsgQ: ["¿Borrar este mensaje? En Gmail irá a la Papelera.", "Delete this message? In Gmail it goes to Trash."] as Tr,
+  delYes: ["Sí, borrar", "Yes, delete"] as Tr,
+  deleting: ["Borrando…", "Deleting…"] as Tr,
+  delErr: ["No se pudo borrar. Inténtalo de nuevo.", "Could not delete. Try again."] as Tr,
   threadErr: ["No se pudo abrir esta conversación.", "Could not open this conversation."] as Tr,
   sent: ["Enviado", "Sent"] as Tr,
   sendErr: ["No se pudo enviar. Inténtalo de nuevo.", "Could not send. Try again."] as Tr,
@@ -300,6 +308,26 @@ function ThreadView({ lang, threadId, onBack, onChanged, onOpenClient, fromAddre
   const [sent, setSent] = useState(false);
   const [err, setErr] = useState(false);
   const [fwd, setFwd] = useState<Mensaje | null>(null);
+  const [confirmDel, setConfirmDel] = useState<"thread" | string | null>(null);
+  const [delBusy, setDelBusy] = useState(false);
+  const [delErr, setDelErr] = useState(false);
+
+  async function doDelete() {
+    if (!msgs || !confirmDel || delBusy) return;
+    const ids = confirmDel === "thread" ? msgs.map((m) => m.id) : [confirmDel];
+    setDelBusy(true);
+    setDelErr(false);
+    const r = await mailDelete(ids);
+    setDelBusy(false);
+    if (!r.ok) return setDelErr(true);
+    setConfirmDel(null);
+    if (confirmDel === "thread" || ids.length >= msgs.length) {
+      onChanged();
+      onBack();
+    } else {
+      await load();
+    }
+  }
 
   const load = useCallback(async () => {
     const r = await fetchThread(threadId);
@@ -366,10 +394,22 @@ function ThreadView({ lang, threadId, onBack, onChanged, onOpenClient, fromAddre
         ) : (
           <span className="pill pill--muted">{tr(C.noClient, lang)}</span>
         )}
+        <button type="button" className="iconbtn iconbtn--sm iconbtn--danger" onClick={() => { setConfirmDel("thread"); setDelErr(false); }} aria-label={tr(C.delThread, lang)} title={tr(C.delThread, lang)}>
+          <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M3 4h10M6 4V3h4v1M5 4l.6 9h4.8L11 4" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg>
+        </button>
       </div>
 
+      {confirmDel && (
+        <div className="item__confirm thread__confirm">
+          <span>{tr(confirmDel === "thread" ? C.delThreadQ : C.delMsgQ, lang)}</span>
+          <button type="button" className={"btn btn--danger btn--sm" + (delBusy ? " btn--busy" : "")} onClick={doDelete} disabled={delBusy}>{tr(delBusy ? C.deleting : C.delYes, lang)}</button>
+          <button type="button" className="btn btn--ghost btn--sm" onClick={() => setConfirmDel(null)}>{tr(C.cancel, lang)}</button>
+          {delErr && <span className="reply__err">{tr(C.delErr, lang)}</span>}
+        </div>
+      )}
+
       <div className="thread__msgs">
-        {msgs.map((m) => <Message key={m.id} m={m} lang={lang} mine={m.direction === "out"} fromAddress={fromAddress} onForward={() => setFwd(m)} />)}
+        {msgs.map((m) => <Message key={m.id} m={m} lang={lang} mine={m.direction === "out"} fromAddress={fromAddress} onForward={() => setFwd(m)} onDelete={() => { setConfirmDel(m.id); setDelErr(false); }} />)}
       </div>
 
       {fwd && <ForwardModal lang={lang} original={fwd} clienteId={cliente?.cliente_id ?? undefined} onClose={() => setFwd(null)} onSent={() => { setFwd(null); load(); }} />}
@@ -387,7 +427,7 @@ function ThreadView({ lang, threadId, onBack, onChanged, onOpenClient, fromAddre
   );
 }
 
-function Message({ m, lang, mine, fromAddress, onForward }: { m: Mensaje; lang: Lang; mine: boolean; fromAddress: string; onForward: () => void }) {
+function Message({ m, lang, mine, fromAddress, onForward, onDelete }: { m: Mensaje; lang: Lang; mine: boolean; fromAddress: string; onForward: () => void; onDelete: () => void }) {
   const ref = useRef<HTMLIFrameElement | null>(null);
   const light = typeof document !== "undefined" && document.documentElement.getAttribute("data-theme") === "light";
   const ink = light ? "#1a1a1a" : "#e8e8e8";
@@ -422,6 +462,7 @@ function Message({ m, lang, mine, fromAddress, onForward }: { m: Mensaje; lang: 
         <span className="msg__from">{mine ? (lang === "es" ? "Tú" : "You") + " · " + fromAddress : m.from_name || m.from_email}</span>
         <span className="msg__when">{m.fecha ? new Date(m.fecha).toLocaleString(lang === "es" ? "es-ES" : "en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}</span>
         <button type="button" className="chipbtn msg__fwd" onClick={onForward} title={tr(C.forward, lang)}>↪ {tr(C.forward, lang)}</button>
+        <button type="button" className="chipbtn chipbtn--danger msg__fwd" onClick={onDelete} title={tr(C.delMsg, lang)}>{tr(C.delMsg, lang)}</button>
       </div>
       <iframe ref={ref} className="msg__body" sandbox="allow-same-origin" srcDoc={doc} onLoad={onLoad} title={m.subject ?? "correo"} />
       {m.adjuntos.length > 0 && (

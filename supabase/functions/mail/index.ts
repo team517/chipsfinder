@@ -146,6 +146,25 @@ Deno.serve(async (req) => {
         return ok({ messageId: info.messageId });
       }
 
+      case "delete": {
+        // Borra correos: en Gmail se mueven a la Papelera (así no vuelven con la sincronización)
+        const ids = Array.isArray(body.ids) ? (body.ids as unknown[]).map(String).slice(0, 500) : [];
+        if (!ids.length) return fail("empty");
+        const { data: rows } = await db.from("mensajes").select("id, folder, uid").in("id", ids);
+        const list = (rows ?? []) as { id: string; folder: string; uid: number | null }[];
+        const conUid = list.filter((r) => r.uid != null);
+        let okIds = list.filter((r) => r.uid == null).map((r) => r.id);
+        if (conUid.length) {
+          const cfg = await getConfig();
+          if (!cfg) return fail("not_connected");
+          const moved = await trashInGmail(cfg.address, cfg.app_password, conUid);
+          if (!moved.ok) return fail("delete", { detail: moved.error });
+          okIds = okIds.concat(moved.ids);
+        }
+        if (okIds.length) await db.from("mensajes").delete().in("id", okIds);
+        return ok({ deleted: okIds.length });
+      }
+
       default:
         return fail("action");
     }
@@ -301,6 +320,39 @@ async function sync(db: DB, address: string, pass: string, limit: number): Promi
   }
   if (stalled && pending === 0) pending = 1;
   return { ok: true, nuevos, pending };
+}
+
+/** Mueve correos a la Papelera de Gmail. Devuelve los ids que se movieron bien. */
+async function trashInGmail(address: string, pass: string, rows: { id: string; folder: string; uid: number | null }[]): Promise<{ ok: true; ids: string[] } | { ok: false; error: string }> {
+  const client = new ImapFlow({ host: "imap.gmail.com", port: 993, secure: true, auth: { user: address, pass }, logger: false });
+  try {
+    await withTimeout(client.connect(), STEP_TIMEOUT_MS);
+  } catch (e) {
+    try { client.close(); } catch { /* nada */ }
+    return { ok: false, error: "IMAP: " + String((e as { message?: string })?.message ?? e).slice(0, 160) };
+  }
+  const done: string[] = [];
+  try {
+    const boxes = (await withTimeout(client.list(), STEP_TIMEOUT_MS)) as { path: string; specialUse?: string }[];
+    const trash = boxes.find((b) => b.specialUse === "\\Trash")?.path ?? "[Gmail]/Trash";
+    const sent = boxes.find((b) => b.specialUse === "\\Sent")?.path ?? SENT_FOLDER;
+    for (const [folder, mailbox] of [["inbox", "INBOX"], ["sent", sent]] as const) {
+      const group = rows.filter((r) => r.folder === folder && r.uid != null);
+      if (!group.length) continue;
+      const lock = await withTimeout(client.getMailboxLock(mailbox), STEP_TIMEOUT_MS);
+      try {
+        await withTimeout(client.messageMove(group.map((r) => r.uid).join(","), trash, { uid: true }), STEP_TIMEOUT_MS);
+        done.push(...group.map((r) => r.id));
+      } finally {
+        try { lock.release(); } catch { /* nada */ }
+      }
+    }
+    try { await withTimeout(client.logout(), 5_000); } catch { try { client.close(); } catch { /* nada */ } }
+  } catch (e) {
+    try { client.close(); } catch { /* nada */ }
+    if (!done.length) return { ok: false, error: String((e as { message?: string })?.message ?? e).slice(0, 200) };
+  }
+  return { ok: true, ids: done };
 }
 
 // deno-lint-ignore no-explicit-any
