@@ -4,9 +4,15 @@
 
 import { supabase } from "../auth";
 
+export type EstadoOferta = "por_contactar" | "contactado" | "respondido" | "oferta" | "descartado";
+export type Moneda = "EUR" | "USD" | "GBP" | "JPY" | "CNY";
+
 export type Oferta = {
   id: string;
-  pedido_id: string;
+  pedido_id: string | null;
+  referencia_id: string | null;
+  estado: EstadoOferta;
+  moneda: Moneda;
   proveedor_id: string | null;
   proveedor: string | null;
   email: string | null;
@@ -148,7 +154,10 @@ export async function setPrecioCliente(id: string, precio: number | null, cantid
 }
 
 export type OfertaInput = {
-  pedido_id: string;
+  pedido_id: string | null;
+  referencia_id?: string | null;
+  estado?: EstadoOferta;
+  moneda?: Moneda;
   proveedor_id: string | null;
   proveedor: string;
   email: string;
@@ -166,8 +175,17 @@ export async function saveOferta(input: OfertaInput, id?: string): Promise<Res<{
   if (!proveedorId && input.proveedor.trim()) {
     proveedorId = await ensureProveedor(input.proveedor, input.email, input.pais, input.enlace);
   }
+  // Si va ligada a un pedido y no se dio la referencia, se toma la del pedido
+  let referenciaId = input.referencia_id ?? null;
+  if (!referenciaId && input.pedido_id) {
+    const { data: pe } = await supabase.from("pedidos").select("referencia_id").eq("id", input.pedido_id).single();
+    referenciaId = (pe as { referencia_id: string | null } | null)?.referencia_id ?? null;
+  }
   const payload = {
     pedido_id: input.pedido_id,
+    referencia_id: referenciaId,
+    estado: input.estado ?? "por_contactar",
+    moneda: input.moneda ?? "EUR",
     proveedor_id: proveedorId,
     proveedor: input.proveedor.trim() || null,
     email: input.email.trim() || null,
@@ -184,7 +202,7 @@ export async function saveOferta(input: OfertaInput, id?: string): Promise<Res<{
   const { data, error } = await q;
   if (error || !data) return fail();
   // Solo un proveedor elegido por artículo
-  if (payload.elegida) {
+  if (payload.elegida && input.pedido_id) {
     await supabase.from("ofertas").update({ elegida: false }).eq("pedido_id", input.pedido_id).neq("id", (data as { id: string }).id);
   }
   return ok({ id: (data as { id: string }).id });

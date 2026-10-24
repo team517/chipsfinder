@@ -10,6 +10,8 @@ import Home from "./Home";
 import TeamPage from "./TeamPage";
 import Account from "./Account";
 import Pedidos from "./Pedidos";
+import Proveedores from "./Proveedores";
+import Referencias from "./Referencias";
 import Unibox from "./Unibox";
 import ErrorBoundary from "./ErrorBoundary";
 import { listUsers } from "./team";
@@ -299,6 +301,25 @@ export default function Panel({ session, onSignOut }: { session: Session; onSign
               isAdmin={isAdmin}
               clienteId={route.id}
               onOpen={(id: string | null) => navigate({ section: "pedidos", id }, true)}
+              onChanged={() => setRefreshKey((k) => k + 1)}
+            />
+          ) : route.section === "proveedores" ? (
+            <Proveedores
+              lang={lang}
+              isAdmin={isAdmin}
+              openId={route.id}
+              onOpen={(id: string | null) => navigate({ section: "proveedores", id }, true)}
+              onOpenClient={(id) => navigate({ section: "pedidos", id })}
+              onChanged={() => setRefreshKey((k) => k + 1)}
+            />
+          ) : route.section === "referencias" ? (
+            <Referencias
+              lang={lang}
+              isAdmin={isAdmin}
+              openId={route.id}
+              onOpen={(id: string | null) => navigate({ section: "referencias", id }, true)}
+              onOpenProv={(id) => navigate({ section: "proveedores", id })}
+              onOpenClient={(id) => navigate({ section: "pedidos", id })}
               onChanged={() => setRefreshKey((k) => k + 1)}
             />
           ) : (

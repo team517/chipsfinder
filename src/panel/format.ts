@@ -19,6 +19,18 @@ export function money(v: unknown, lang: Lang): string {
   }).format(n);
 }
 
+/** Precio con su moneda (EUR, USD…). */
+export function moneyCur(v: unknown, cur: string | null | undefined, lang: Lang): string {
+  if (v === null || v === undefined || v === "") return "—";
+  const n = Number(v);
+  if (!Number.isFinite(n)) return "—";
+  try {
+    return new Intl.NumberFormat(locale(lang), { style: "currency", currency: cur || "EUR", minimumFractionDigits: 2, maximumFractionDigits: 4 }).format(n);
+  } catch {
+    return n.toFixed(2) + " " + (cur || "EUR");
+  }
+}
+
 export function num(v: unknown, lang: Lang): string {
   if (v === null || v === undefined || v === "") return "—";
   const n = Number(v);

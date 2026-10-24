@@ -3,7 +3,8 @@ import type { Lang } from "../i18n";
 import { supabase } from "../auth";
 import { PEDIDO_ESTADOS } from "./entities";
 import { StatusPill } from "./EntityPage";
-import { money, num, text, tr, type Tr } from "./format";
+import { money, moneyCur, num, text, tr, type Tr } from "./format";
+import { EstadoPill, OfferEditor } from "./sourcing";
 import {
   clienteNuevo,
   deleteOferta,
@@ -11,13 +12,11 @@ import {
   fetchCliente,
   fetchClientesConPedidos,
   savePedido,
-  saveOferta,
   setElegida,
   setPrecioCliente,
   type Cliente,
   type ClienteResumen,
   type Oferta,
-  type OfertaInput,
   type Pedido,
   type PedidoInput,
 } from "./pedidos-data";
@@ -155,7 +154,9 @@ const firstNum = (s: string | null | undefined): number | null => {
   return m ? Number(m[0]) : null;
 };
 const bestCost = (p: Pedido): { cost: number; name: string } | null => {
-  const withPrice = p.ofertas.filter((o) => o.precio != null);
+  const live = p.ofertas.filter((o) => o.precio != null && o.estado !== "descartado");
+  const eur = live.filter((o) => (o.moneda ?? "EUR") === "EUR");
+  const withPrice = eur.length ? eur : live;
   if (!withPrice.length) return null;
   const chosen = withPrice.find((o) => o.elegida);
   const o = chosen ?? withPrice.reduce((a, b) => ((b.precio ?? 0) < (a.precio ?? 0) ? b : a));
@@ -463,9 +464,9 @@ function ItemDetail({
                         {text(o.proveedor)}
                         {o.pais && <span className="offer__country">{o.pais}</span>}
                       </span>
-                      {o.disponibilidad && <span className="offer__avail">{o.disponibilidad}</span>}
+                      <span className="offer__avail"><EstadoPill estado={o.estado} lang={lang} />{o.disponibilidad ? " " + o.disponibilidad : ""}</span>
                     </div>
-                    <div className="offer__price"><span className="offer__eur">{o.precio != null ? money(o.precio, lang) : "—"}</span></div>
+                    <div className="offer__price"><span className="offer__eur">{moneyCur(o.precio, o.moneda, lang)}</span></div>
                     <div className="offer__actions">
                       {o.email && <a className="chipbtn" href={"mailto:" + o.email} title={o.email}>✉ {tr(C.write, lang)}</a>}
                       {o.enlace && <a className="chipbtn" href={o.enlace.startsWith("http") ? o.enlace : "https://" + o.enlace} target="_blank" rel="noopener noreferrer">↗ {tr(C.visit, lang)}</a>}
@@ -483,7 +484,7 @@ function ItemDetail({
       </div>
 
       {offerFor && (
-        <OfferDrawer lang={lang} pedido={pedido} oferta={offerFor === "new" ? null : offerFor}
+        <OfferEditor lang={lang} pedidoId={pedido.id} oferta={offerFor === "new" ? null : offerFor}
           onClose={() => setOfferFor(null)} onSaved={() => { setOfferFor(null); onChanged(); }} />
       )}
     </>
@@ -742,80 +743,6 @@ function ItemDrawer({ lang, fixedCliente, pedido, onClose, onSaved }: {
             <div className="fcell"><label className="field__label">{tr(C.fQty, lang)}</label><input className="input input--sm" inputMode="numeric" value={cantidad} onChange={(e) => setCantidad(e.target.value)} placeholder="800" /></div>
             <div className="fcell"><label className="field__label">{tr(C.fTarget, lang)}</label><input className="input input--sm" inputMode="decimal" value={objetivo} onChange={(e) => setObjetivo(e.target.value)} placeholder="60,00" /></div>
             <div className="fcell fcell--wide"><label className="field__label">{tr(C.fNotes, lang)}</label><textarea className="input input--sm input--area" rows={3} value={notas} onChange={(e) => setNotas(e.target.value)} /></div>
-          </div>
-          {error && <div className="note note--error" role="alert"><span className="note__tag">ERR</span><span className="note__text">{tr(error === "req" ? C.reqErr : C.saveErr, lang)}</span></div>}
-        </div>
-      </Drawer>
-    </form>
-  );
-}
-
-function OfferDrawer({ lang, pedido, oferta, onClose, onSaved }: {
-  lang: Lang; pedido: Pedido; oferta: Oferta | null; onClose: () => void; onSaved: () => void;
-}) {
-  const [provs, setProvs] = useState<{ id: string; nombre: string; email: string | null; pais: string | null; web: string | null }[]>([]);
-  const [proveedorId, setProveedorId] = useState(oferta?.proveedor_id ?? "");
-  const [nombre, setNombre] = useState(oferta?.proveedor ?? "");
-  const [email, setEmail] = useState(oferta?.email ?? "");
-  const [enlace, setEnlace] = useState(oferta?.enlace ?? "");
-  const [pais, setPais] = useState(oferta?.pais ?? "");
-  const [precio, setPrecio] = useState(numToForm(oferta?.precio));
-  const [disp, setDisp] = useState(oferta?.disponibilidad ?? "");
-  const [elegida, setElegidaS] = useState(oferta?.elegida ?? false);
-  const [notas, setNotas] = useState(oferta?.notas ?? "");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<"req" | "save" | null>(null);
-
-  useEffect(() => {
-    supabase.from("proveedores").select("id, nombre, email, pais, web").order("nombre").limit(5000).then(({ data }) => setProvs((data ?? []) as typeof provs));
-  }, []);
-
-  function pick(id: string) {
-    setProveedorId(id);
-    setError(null);
-    if (id && id !== "__new") {
-      const p = provs.find((x) => x.id === id);
-      if (p) { setNombre(p.nombre); setEmail(p.email ?? ""); setPais(p.pais ?? ""); setEnlace(p.web ?? ""); }
-    }
-  }
-
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    if (busy) return;
-    if (!proveedorId && !nombre.trim()) return setError("req");
-    const p = precio.trim() ? moneyToNum(precio) : null;
-    if (Number.isNaN(p)) return setError("req");
-    setError(null);
-    setBusy(true);
-    const input: OfertaInput = {
-      pedido_id: pedido.id,
-      proveedor_id: proveedorId && proveedorId !== "__new" ? proveedorId : null,
-      proveedor: nombre, email, enlace, pais, precio: p, disponibilidad: disp, elegida, notas,
-    };
-    const r = await saveOferta(input, oferta?.id);
-    setBusy(false);
-    if (!r.ok) return setError("save");
-    onSaved();
-  }
-
-  return (
-    <form onSubmit={submit} noValidate>
-      <Drawer lang={lang} eyebrow={C.addOffer} title={oferta ? text(oferta.proveedor) : tr(C.addOffer, lang)} onClose={onClose}
-        foot={<div className="drawer__foot"><span className="drawer__spacer" /><button type="button" className="btn btn--ghost btn--sm" onClick={onClose}>{tr(C.cancel, lang)}</button><button type="submit" className={"btn btn--primary btn--sm" + (busy ? " btn--busy" : "")} aria-busy={busy}>{busy && <span className="spinner" aria-hidden="true" />}{tr(busy ? C.saving : C.save, lang)}</button></div>}>
-        <div className="drawer__body">
-          <p className="fhint" style={{ marginTop: -4 }}>{text(pedido.mpn)}{pedido.descripcion ? " · " + pedido.descripcion : ""}</p>
-          <div className="fgrid">
-            <div className="fcell fcell--wide"><label className="field__label">{tr(C.oSupplier, lang)}<span className="req"> *</span></label>
-              <select className="input input--sm" value={proveedorId || "__new"} onChange={(e) => pick(e.target.value)}><option value="__new">{tr(C.oPick, lang)}</option>{provs.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}</select>
-            </div>
-            <div className="fcell"><label className="field__label">{tr(C.oName, lang)}</label><input className="input input--sm" value={nombre} onChange={(e) => { setNombre(e.target.value); setProveedorId(""); setError(null); }} placeholder="Assured Systems" /></div>
-            <div className="fcell"><label className="field__label">{tr(C.oCountry, lang)}</label><input className="input input--sm" value={pais} onChange={(e) => setPais(e.target.value)} placeholder="Reino Unido" /></div>
-            <div className="fcell"><label className="field__label">{tr(C.oEmail, lang)}</label><input className="input input--sm" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="sales@assured.com" /></div>
-            <div className="fcell"><label className="field__label">{tr(C.oWeb, lang)}</label><input className="input input--sm" value={enlace} onChange={(e) => setEnlace(e.target.value)} placeholder="https://…" /></div>
-            <div className="fcell"><label className="field__label">{tr(C.oPrice, lang)}</label><input className="input input--sm" inputMode="decimal" value={precio} onChange={(e) => setPrecio(e.target.value)} placeholder="0,00" /></div>
-            <div className="fcell"><label className="field__label">{tr(C.oAvail, lang)}</label><input className="input input--sm" value={disp} onChange={(e) => setDisp(e.target.value)} placeholder="Anuncia 8.163 uds." /><span className="fhint">{tr(C.oAvailHint, lang)}</span></div>
-            <div className="fcell fcell--wide"><button type="button" className="remember" role="checkbox" aria-checked={elegida} onClick={() => setElegidaS((v) => !v)}><span className="remember__box" aria-hidden="true">{elegida ? "✓" : ""}</span>{tr(C.oChosen, lang)}</button></div>
-            <div className="fcell fcell--wide"><label className="field__label">{tr(C.fNotes, lang)}</label><textarea className="input input--sm input--area" rows={2} value={notas} onChange={(e) => setNotas(e.target.value)} /></div>
           </div>
           {error && <div className="note note--error" role="alert"><span className="note__tag">ERR</span><span className="note__text">{tr(error === "req" ? C.reqErr : C.saveErr, lang)}</span></div>}
         </div>
