@@ -183,6 +183,11 @@ export async function setNewPassword(password: string, remember: boolean): Promi
   return { ok: true };
 }
 
+/** Hay una sesión guardada en este navegador (aún sin comprobar con el servidor). */
+export function hasStoredSession(): boolean {
+  return !!sessionStore.getItem("chf-auth");
+}
+
 export async function getSession(): Promise<Session | null> {
   const { data } = await supabase.auth.getSession();
   return data.session;

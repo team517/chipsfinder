@@ -2,9 +2,11 @@ import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent }
 import type { Session } from "@supabase/supabase-js";
 import { T, type Copy, type Lang } from "./i18n";
 import { PHOTOS, SUPPORT_EMAIL, readLayout } from "./config";
+import { initialLang, saveLang } from "./lang";
 import {
   clearEmailLink,
   getSession,
+  hasStoredSession,
   isTeamEmail,
   readEmailLink,
   requestPasswordReset,
@@ -25,17 +27,6 @@ import {
 type View = "checking" | "login" | "forgot" | "setPassword" | "done";
 type ErrorKey = LoginError | ServerError;
 
-const LANG_KEY = "chf-lang";
-
-function initialLang(): Lang {
-  try {
-    const l = localStorage.getItem(LANG_KEY);
-    if (l === "es" || l === "en") return l;
-  } catch {
-    /* almacenamiento bloqueado */
-  }
-  return "es";
-}
 
 function errorMessage(t: Copy, e: ErrorKey | null): string {
   switch (e) {
@@ -75,6 +66,11 @@ type Boot = { view: View; session: Session | null; linkType: LinkType; error: Se
 // Se ejecuta una sola vez por carga de página (el enlace del correo solo sirve una vez).
 let bootPromise: Promise<Boot> | null = null;
 
+/** Tras cerrar sesión desde el panel, la siguiente carga vuelve a comprobar todo. */
+export function resetBoot() {
+  bootPromise = null;
+}
+
 function boot(): Promise<Boot> {
   bootPromise ??= (async (): Promise<Boot> => {
     let linkError: ServerError | null = null;
@@ -113,7 +109,7 @@ function ErrorNote({ id, text }: { id: string; text: string }) {
   );
 }
 
-export default function App() {
+export default function App({ onEnter }: { onEnter: (s: Session) => void }) {
   const layout = useMemo(readLayout, []);
   const [lang, setLangState] = useState<Lang>(initialLang);
   const [view, setView] = useState<View>("checking");
@@ -128,15 +124,18 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [forgotSent, setForgotSent] = useState(false);
   const alive = useRef(true);
+  const enterTimer = useRef<number | undefined>(undefined);
   const viewRef = useRef<View>(view);
   viewRef.current = view;
 
   const t = T[lang];
+  const [quietBoot] = useState(() => hasStoredSession() && !readEmailLink());
 
   useEffect(() => {
     alive.current = true;
     return () => {
       alive.current = false;
+      window.clearTimeout(enterTimer.current);
     };
   }, []);
 
@@ -150,6 +149,10 @@ export default function App() {
     let cancelled = false;
     boot().then((b) => {
       if (cancelled) return;
+      if (b.view === "done" && b.session) {
+        onEnter(b.session);
+        return;
+      }
       setSession(b.session);
       if (b.view === "setPassword") {
         setEmail(b.session?.user.email ?? "");
@@ -174,11 +177,7 @@ export default function App() {
   }, []);
 
   const setLang = (code: Lang) => {
-    try {
-      localStorage.setItem(LANG_KEY, code);
-    } catch {
-      /* almacenamiento bloqueado */
-    }
+    saveLang(code);
     setLangState(code);
   };
 
@@ -194,6 +193,7 @@ export default function App() {
     setPassword2("");
     setShowPw(false);
     setView("done");
+    if (s) enterTimer.current = window.setTimeout(() => onEnter(s), 1400);
   }
 
   async function submit(e: FormEvent) {
@@ -231,6 +231,7 @@ export default function App() {
 
   async function goLogin() {
     // Desde "crear contraseña" o "sesión iniciada" se cierra la sesión.
+    window.clearTimeout(enterTimer.current);
     if (view === "done" || view === "setPassword") await signOut();
     if (!alive.current) return;
     setSession(null);
@@ -320,6 +321,15 @@ export default function App() {
           : view === "done"
             ? t.doneSub(signedEmail)
             : t.loginSub;
+
+  // Recarga con sesión guardada: no enseñar la pantalla de acceso mientras se comprueba.
+  if (view === "checking" && quietBoot) {
+    return (
+      <div className="boot-screen" aria-busy="true">
+        <span className="spinner" aria-hidden="true" />
+      </div>
+    );
+  }
 
   const rememberToggle = (
     <button

@@ -71,6 +71,30 @@ por esa dirección y vuelve a hacer `supabase config push`.
 El botón está oculto hasta configurar el proveedor "Azure" en Supabase. Después pon
 `VITE_SSO_MICROSOFT=1` en `.env.local`.
 
+## Panel interno (`/panel`)
+
+Al iniciar sesión se ve "Sesión iniciada · Cargando el panel…" y se entra al panel:
+
+| Sección | Qué guarda | Tabla |
+| --- | --- | --- |
+| 00 Inicio | Resumen: pedidos abiertos, lotes por revisar, referencias y stock, clientes; últimos pedidos y lotes pendientes | — |
+| 01 Pedidos | Peticiones de clientes (PED-0001…), referencia, cantidad, precio objetivo, estado | `pedidos` |
+| 02 Lotes | Material que entra: proveedor, date code, inspección (pendiente / en inspección / aprobado / rechazado) | `lotes` |
+| 03 Referencias | Catálogo: MPN, fabricante, encapsulado, stock, precio, ubicación | `referencias` |
+| 04 Proveedores | Fabricantes, distribuidores y brokers, con valoración | `proveedores` |
+| 05 Clientes | Empresas, contacto y número de pedidos | `clientes` |
+
+- Cada sección tiene buscador, filtros por estado y una ficha lateral para crear y editar.
+- Leer, crear y editar: cualquier cuenta @chipsfinder.es. **Borrar: solo administradores.**
+  Lo controla la base de datos (RLS), no solo la pantalla.
+- No se puede borrar un cliente que tiene pedidos.
+- Cada registro tiene su propia dirección (`/panel/pedidos/<id>`), que se puede compartir con el equipo.
+- En móvil el menú se abre con "Menú" y las tablas pasan a tarjetas.
+- Tablas y permisos: `supabase/migrations/20261024130000_panel.sql`.
+
+Al publicarlo, el servidor tiene que devolver `index.html` para cualquier ruta `/panel/...`
+(lo normal en una app de una sola página).
+
 ## Ajustes del diseño
 
 En `src/config.ts`: **foto** (`laboratorio`, `chip`, `placa`) y **lado** (`izquierda`, `derecha`).
