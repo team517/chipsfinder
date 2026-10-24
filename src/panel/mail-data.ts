@@ -40,6 +40,7 @@ export type Thread = {
   cliente_nombre: string | null;
   party_email: string;
   party_name: string;
+  ids: string[];
 };
 
 type Ok<T> = { ok: true } & T;
@@ -97,10 +98,11 @@ export async function fetchThreads(): Promise<{ ok: boolean; threads: Thread[] }
       t = {
         thread_id: key, subject: m.subject || "(sin asunto)", last: m, count: 0, unseen: 0,
         cliente_id: m.cliente_id, cliente_nombre: m.cliente?.nombre ?? null,
-        party_email: p.email, party_name: p.name,
+        party_email: p.email, party_name: p.name, ids: [],
       };
       map.set(key, t);
     }
+    t.ids.push(m.id);
     t.count += 1;
     if (!m.seen && m.direction === "in") t.unseen += 1;
     if (m.cliente_id && !t.cliente_id) { t.cliente_id = m.cliente_id; t.cliente_nombre = m.cliente?.nombre ?? null; }

@@ -2166,3 +2166,46 @@ select.input option {
 .thread__confirm {
   margin: 12px 18px 0;
 }
+
+/* Selección múltiple en el Unibox */
+.selbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 28px;
+  padding: 0 2px;
+}
+.selbar__all {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ink-3);
+  cursor: pointer;
+  user-select: none;
+}
+.selbar input,
+.thread-li__check {
+  accent-color: var(--accent);
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+  margin: 0;
+}
+.thread-li {
+  position: relative;
+}
+.thread-li__check {
+  position: absolute;
+  left: 12px;
+  top: 15px;
+  z-index: 1;
+}
+.thread-li .thread-row {
+  padding-left: 36px;
+}
+.thread-li.is-picked .thread-row {
+  border-color: #f0503c88;
+  background: #f0503c0a;
+}

@@ -42,6 +42,14 @@ const C = {
   cancel: ["Cancelar", "Cancel"] as Tr,
   close: ["Cerrar", "Close"] as Tr,
   retry: ["Reintentar", "Retry"] as Tr,
+  selectAll: ["Seleccionar todo", "Select all"] as Tr,
+  selectOne: ["Seleccionar conversación", "Select conversation"] as Tr,
+  nSelected: (n: number): Tr => [n === 1 ? "1 seleccionada" : n + " seleccionadas", n === 1 ? "1 selected" : n + " selected"],
+  delSelected: ["Borrar selección", "Delete selection"] as Tr,
+  delSelectedQ: (n: number): Tr => [
+    "¿Borrar " + (n === 1 ? "1 conversación" : n + " conversaciones") + "? En Gmail irán a la Papelera.",
+    "Delete " + (n === 1 ? "1 conversation" : n + " conversations") + "? In Gmail they go to Trash.",
+  ],
   delThread: ["Borrar conversación", "Delete conversation"] as Tr,
   delMsg: ["Borrar", "Delete"] as Tr,
   delThreadQ: ["¿Borrar toda la conversación? En Gmail irá a la Papelera.", "Delete the whole conversation? In Gmail it goes to Trash."] as Tr,
@@ -182,11 +190,45 @@ function Inbox({ lang, isAdmin, status, onStatus, onOpenClient }: {
   const [q, setQ] = useState("");
   const [syncing, setSyncing] = useState(false);
   const [left, setLeft] = useState<number | null>(null);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [askBulk, setAskBulk] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkErr, setBulkErr] = useState(false);
 
   const load = useCallback(async () => {
     const r = await fetchThreads();
     setThreads(r.threads);
+    // quitar de la selección lo que ya no existe
+    setPicked((p) => new Set([...p].filter((id) => r.threads.some((t) => t.thread_id === id))));
   }, []);
+
+  const togglePick = (id: string) =>
+    setPicked((p) => {
+      const n = new Set(p);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+
+  async function deletePicked() {
+    if (bulkBusy || !threads) return;
+    const ids = threads.filter((t) => picked.has(t.thread_id)).flatMap((t) => t.ids);
+    if (!ids.length) return;
+    setBulkBusy(true);
+    setBulkErr(false);
+    let okAll = true;
+    for (let i = 0; i < ids.length; i += 400) {
+      const r = await mailDelete(ids.slice(i, i + 400));
+      if (!r.ok) okAll = false;
+    }
+    setBulkBusy(false);
+    if (!okAll) setBulkErr(true);
+    else setAskBulk(false);
+    if (sel && picked.has(sel)) setSel(null);
+    setPicked(new Set());
+    await load();
+    onStatus();
+  }
   useEffect(() => {
     load();
   }, [load]);
@@ -258,6 +300,29 @@ function Inbox({ lang, isAdmin, status, onStatus, onOpenClient }: {
             <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" strokeWidth="1.5" /><path d="M11 11l3.5 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
             <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={tr(C.search, lang)} className="search__input" />
           </label>
+          {filtered.length > 0 && (
+            <div className="selbar">
+              <label className="selbar__all">
+                <input
+                  type="checkbox"
+                  checked={filtered.length > 0 && filtered.every((t) => picked.has(t.thread_id))}
+                  onChange={(e) => setPicked(e.target.checked ? new Set(filtered.map((t) => t.thread_id)) : new Set())}
+                />
+                {picked.size > 0 ? tr(C.nSelected(picked.size), lang) : tr(C.selectAll, lang)}
+              </label>
+              {picked.size > 0 && !askBulk && (
+                <button type="button" className="chipbtn chipbtn--danger" onClick={() => { setAskBulk(true); setBulkErr(false); }}>{tr(C.delSelected, lang)}</button>
+              )}
+            </div>
+          )}
+          {askBulk && picked.size > 0 && (
+            <div className="item__confirm">
+              <span>{tr(C.delSelectedQ(picked.size), lang)}</span>
+              <button type="button" className={"btn btn--danger btn--sm" + (bulkBusy ? " btn--busy" : "")} onClick={deletePicked} disabled={bulkBusy}>{tr(bulkBusy ? C.deleting : C.delYes, lang)}</button>
+              <button type="button" className="btn btn--ghost btn--sm" onClick={() => setAskBulk(false)}>{tr(C.cancel, lang)}</button>
+              {bulkErr && <span className="reply__err">{tr(C.delErr, lang)}</span>}
+            </div>
+          )}
           {threads === null ? (
             <div className="state">{tr(C.loading, lang)}</div>
           ) : filtered.length === 0 ? (
@@ -265,7 +330,14 @@ function Inbox({ lang, isAdmin, status, onStatus, onOpenClient }: {
           ) : (
             <ul className="thread-list">
               {filtered.map((t) => (
-                <li key={t.thread_id}>
+                <li key={t.thread_id} className={"thread-li" + (picked.has(t.thread_id) ? " is-picked" : "")}>
+                  <input
+                    type="checkbox"
+                    className="thread-li__check"
+                    checked={picked.has(t.thread_id)}
+                    onChange={() => togglePick(t.thread_id)}
+                    aria-label={tr(C.selectOne, lang)}
+                  />
                   <button type="button" className={"thread-row" + (sel === t.thread_id ? " is-active" : "") + (t.unseen ? " is-unseen" : "")} onClick={() => setSel(t.thread_id)}>
                     <div className="thread-row__top">
                       <span className="thread-row__who">{t.cliente_nombre || t.party_name || t.party_email}</span>
