@@ -30,7 +30,7 @@ type PanelSection = SectionId | "equipo" | "cuenta";
 
 const EXTRA: Record<"equipo" | "cuenta", Tr> = { equipo: C.equipo, cuenta: C.account };
 
-const RECOGNISED: PanelSection[] = ["inicio", "pedidos", "lotes", "referencias", "proveedores", "clientes", "equipo", "cuenta"];
+const RECOGNISED: PanelSection[] = ["inicio", "pedidos", "referencias", "proveedores", "clientes", "equipo", "cuenta"];
 
 type Route = { section: PanelSection; id: string | null };
 
@@ -76,6 +76,13 @@ export default function Panel({ session, onSignOut }: { session: Session; onSign
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
+
+  // Si la dirección no corresponde a la sección (p. ej. una ruta antigua de /panel/lotes),
+  // se normaliza sin dejar rastro en el historial.
+  useEffect(() => {
+    const want = routePath(route);
+    if (window.location.pathname !== want) window.history.replaceState(null, "", want);
+  }, [route]);
 
   const navigate = useCallback((r: Route, replace = false) => {
     const path = routePath(r);
@@ -161,7 +168,7 @@ export default function Panel({ session, onSignOut }: { session: Session; onSign
       {isAdmin && (
         <div className="nav-group">
           <span className="nav-group__label">{tr(C.adminGroup, lang)}</span>
-          <ul>{navItem("equipo", "06", C.equipo, counts.equipo)}</ul>
+          <ul>{navItem("equipo", "05", C.equipo, counts.equipo)}</ul>
         </div>
       )}
     </nav>

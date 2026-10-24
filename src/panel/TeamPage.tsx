@@ -145,7 +145,7 @@ export default function Team({ lang, openId, onOpen }: { lang: Lang; openId: str
       <header className="sec-head">
         <div className="sec-head__text">
           <span className="sec-eyebrow">
-            <span className="sec-eyebrow__code">06</span>
+            <span className="sec-eyebrow__code">05</span>
             {tr(C.eyebrow, lang)}
           </span>
           <h1 className="sec-title">{tr(C.title, lang)}</h1>
@@ -274,7 +274,7 @@ function CreateDrawer({ lang, onClose, onCreated }: { lang: Lang; onClose: () =>
       <form className="drawer__panel" onSubmit={submit} noValidate>
         <div className="drawer__head">
           <div>
-            <span className="sec-eyebrow"><span className="sec-eyebrow__code">06</span>{tr(C.createTitle, lang)}</span>
+            <span className="sec-eyebrow"><span className="sec-eyebrow__code">05</span>{tr(C.createTitle, lang)}</span>
             <h2 className="drawer__title" id="team-create">{result ? tr(result.mode === "invite" ? C.createdInvite : C.createdTemp, lang) : tr(C.createTitle, lang)}</h2>
           </div>
           <button type="button" className="iconbtn" onClick={onClose} aria-label={tr(C.close, lang)}>
@@ -410,7 +410,7 @@ function ManageDrawer({ lang, user, isSelf, onClose, onChanged, onDeleted }: {
       <div className="drawer__panel">
         <div className="drawer__head">
           <div>
-            <span className="sec-eyebrow"><span className="sec-eyebrow__code">06</span>{tr(C.manageTitle, lang)}</span>
+            <span className="sec-eyebrow"><span className="sec-eyebrow__code">05</span>{tr(C.manageTitle, lang)}</span>
             <h2 className="drawer__title" id="team-manage">{user.email}</h2>
           </div>
           <button type="button" className="iconbtn" onClick={onClose} aria-label={tr(C.close, lang)}>

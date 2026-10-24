@@ -3,7 +3,7 @@
 import type { Lang } from "../i18n";
 import { date, money, num, pedidoCode, text, type Tr } from "./format";
 
-export type SectionId = "inicio" | "pedidos" | "lotes" | "referencias" | "proveedores" | "clientes";
+export type SectionId = "inicio" | "pedidos" | "referencias" | "proveedores" | "clientes";
 export type EntityId = Exclude<SectionId, "inicio">;
 
 export type Tone = "accent" | "ok" | "warn" | "bad" | "info" | "muted";
@@ -70,13 +70,6 @@ export const PEDIDO_ESTADOS: Option[] = [
   { value: "perdido", label: ["Perdido", "Lost"], tone: "bad" },
 ];
 export const PEDIDOS_ABIERTOS = ["nuevo", "cotizado", "confirmado"];
-
-export const LOTE_ESTADOS: Option[] = [
-  { value: "pendiente", label: ["Pendiente", "Pending"], tone: "accent" },
-  { value: "inspeccion", label: ["En inspección", "Inspecting"], tone: "warn" },
-  { value: "aprobado", label: ["Aprobado", "Approved"], tone: "ok" },
-  { value: "rechazado", label: ["Rechazado", "Rejected"], tone: "bad" },
-];
 
 const PROVEEDOR_TIPOS: Option[] = [
   { value: "fabricante", label: ["Fabricante", "Manufacturer"] },
@@ -151,52 +144,10 @@ export const ENTITIES: Record<EntityId, Entity> = {
       [pedidoCode(r.numero), rel(r, "cliente", "nombre"), rel(r, "referencia", "mpn"), r.mpn, r.notas].join(" "),
   },
 
-  lotes: {
-    id: "lotes",
-    table: "lotes",
-    code: "02",
-    title: ["Lotes", "Batches"],
-    eyebrow: ["Control de lotes", "Batch control"],
-    intro: [
-      "Material que entra: de qué proveedor viene, su date code y el resultado de la inspección.",
-      "Incoming material: which supplier it comes from, its date code and the inspection result.",
-    ],
-    singular: ["lote", "batch"],
-    newLabel: ["Nuevo lote", "New batch"],
-    empty: ["Todavía no hay lotes registrados.", "No batches recorded yet."],
-    select: "*, referencia:referencias(mpn, fabricante), proveedor:proveedores(nombre), pedido:pedidos(numero)",
-    order: { column: "recibido_el", ascending: false },
-    statusKey: "estado",
-    statuses: LOTE_ESTADOS,
-    fields: [
-      { key: "codigo", label: ["Código de lote", "Batch code"], type: "text", required: true, mono: true, placeholder: "L-2026-0001" },
-      { key: "estado", label: ["Estado", "Status"], type: "select", options: LOTE_ESTADOS, required: true },
-      { key: "referencia_id", label: ["Referencia", "Part"], type: "fk", fk: { table: "referencias", labelKey: "mpn", extra: "fabricante" } },
-      { key: "proveedor_id", label: ["Proveedor", "Supplier"], type: "fk", fk: { table: "proveedores", labelKey: "nombre" } },
-      { key: "cantidad", label: ["Cantidad", "Quantity"], type: "number", placeholder: "2500" },
-      { key: "date_code", label: ["Date code", "Date code"], type: "text", mono: true, placeholder: "2441" },
-      { key: "recibido_el", label: ["Recibido el", "Received on"], type: "date", required: true },
-      { key: "pedido_id", label: ["Pedido asociado", "Related order"], type: "fk", fk: { table: "pedidos", labelKey: "numero" } },
-      { key: "notas", label: L.notas, type: "textarea", wide: true },
-    ],
-    columns: [
-      { key: "codigo", label: ["Lote", "Batch"], value: (r) => text(r.codigo), mono: true, strong: true },
-      { key: "referencia", label: ["Referencia", "Part"], value: (r) => text(rel(r, "referencia", "mpn")), mono: true },
-      { key: "proveedor", label: ["Proveedor", "Supplier"], value: (r) => text(rel(r, "proveedor", "nombre")), hideOnMobile: true },
-      { key: "cantidad", label: ["Cantidad", "Qty"], value: (r, l) => num(r.cantidad, l), align: "right", mono: true },
-      { key: "date_code", label: ["D/C", "D/C"], value: (r) => text(r.date_code), mono: true, hideOnMobile: true },
-      { key: "recibido_el", label: ["Recibido", "Received"], value: (r, l) => date(r.recibido_el, l), hideOnMobile: true },
-      { key: "estado", label: ["Estado", "Status"], value: (r) => String(r.estado ?? ""), status: true },
-    ],
-    titleOf: (r) => text(r.codigo),
-    searchText: (r) =>
-      [r.codigo, rel(r, "referencia", "mpn"), rel(r, "proveedor", "nombre"), r.date_code, r.notas].join(" "),
-  },
-
   referencias: {
     id: "referencias",
     table: "referencias",
-    code: "03",
+    code: "02",
     title: ["Referencias", "Parts"],
     eyebrow: ["Catálogo y stock", "Catalogue and stock"],
     intro: [
@@ -233,7 +184,7 @@ export const ENTITIES: Record<EntityId, Entity> = {
   proveedores: {
     id: "proveedores",
     table: "proveedores",
-    code: "04",
+    code: "03",
     title: ["Proveedores", "Suppliers"],
     eyebrow: ["Red de suministro", "Supply network"],
     intro: [
@@ -274,7 +225,7 @@ export const ENTITIES: Record<EntityId, Entity> = {
   clientes: {
     id: "clientes",
     table: "clientes",
-    code: "05",
+    code: "04",
     title: ["Clientes", "Clients"],
     eyebrow: ["Cartera de clientes", "Client book"],
     intro: [
@@ -314,7 +265,7 @@ export const ENTITIES: Record<EntityId, Entity> = {
 };
 
 export const NAV: { group: Tr; items: SectionId[] }[] = [
-  { group: ["Operación", "Operations"], items: ["inicio", "pedidos", "lotes"] },
+  { group: ["Operación", "Operations"], items: ["inicio", "pedidos"] },
   { group: ["Catálogo", "Catalogue"], items: ["referencias", "proveedores"] },
   { group: ["Comercial", "Sales"], items: ["clientes"] },
 ];
@@ -322,7 +273,6 @@ export const NAV: { group: Tr; items: SectionId[] }[] = [
 export const SECTION_TITLE: Record<SectionId, Tr> = {
   inicio: ["Inicio", "Home"],
   pedidos: ENTITIES.pedidos.title,
-  lotes: ENTITIES.lotes.title,
   referencias: ENTITIES.referencias.title,
   proveedores: ENTITIES.proveedores.title,
   clientes: ENTITIES.clientes.title,
@@ -331,8 +281,7 @@ export const SECTION_TITLE: Record<SectionId, Tr> = {
 export const SECTION_CODE: Record<SectionId, string> = {
   inicio: "00",
   pedidos: "01",
-  lotes: "02",
-  referencias: "03",
-  proveedores: "04",
-  clientes: "05",
+  referencias: "02",
+  proveedores: "03",
+  clientes: "04",
 };
