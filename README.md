@@ -130,8 +130,17 @@ Function `supabase/functions/mail` (IMAP con `imapflow`, parseo con `mailparser`
 - **Responder** envía por SMTP en el **mismo hilo** (In-Reply-To/References) y guarda el enviado.
 - Deploy de la función: `supabase functions deploy mail --project-ref vwybcwidffcnpcjlehxv --use-api`
 
-Pendiente recomendable: un cron que sincronice cada pocos minutos (ahora se sincroniza al abrir y con
-el botón «Sincronizar»).
+**Sincronizador automático:** una tarea `pg_cron` (`chf-mail-sync`, migración `…_mail_cron.sql`)
+llama a la función cada 2 minutos con la cabecera `x-cron-secret`. El secreto está en la variable
+`CRON_SECRET` de la función y en Supabase Vault (`chf_cron_secret`), nunca en el repo. La función se
+despliega con `--no-verify-jwt` porque comprueba ella misma el usuario (o el secreto del cron):
+
+```bash
+supabase functions deploy mail --project-ref vwybcwidffcnpcjlehxv --use-api --no-verify-jwt
+```
+
+La sincronización va en lotes de 5 correos por llamada (las funciones tienen poca CPU por llamada);
+el botón «Sincronizar» repite lotes hasta traerlo todo y el Unibox refresca la lista cada minuto.
 
 ## Ajustes del diseño
 

@@ -183,6 +183,18 @@ function Inbox({ lang, isAdmin, status, onStatus, onOpenClient }: {
     load();
   }, [load]);
 
+  // El servidor sincroniza solo cada 2 minutos: refrescamos la lista cada minuto
+  useEffect(() => {
+    const t = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        load();
+        onStatus();
+      }
+    }, 60_000);
+    return () => window.clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [load]);
+
   // Primera sincronización si no hay nada
   useEffect(() => {
     if (threads && threads.length === 0 && !status.last_sync) void doSync();
