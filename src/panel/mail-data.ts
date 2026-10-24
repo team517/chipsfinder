@@ -141,3 +141,6 @@ export async function markThreadSeen(threadId: string) {
   await supabase.from("mensajes").update({ seen: true }).eq("thread_id", threadId).eq("direction", "in").eq("seen", false);
   if (UUID_RE.test(threadId)) await supabase.from("mensajes").update({ seen: true }).eq("id", threadId).eq("seen", false);
 }
+
+/** Redacta o traduce un correo con IA (en el servidor). error "no_key" si no hay clave configurada. */
+export const mailAi = (p: Record<string, unknown>) => call<{ subject: string; body: string }>("ai", p);

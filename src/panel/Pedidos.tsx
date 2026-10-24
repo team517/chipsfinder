@@ -5,6 +5,7 @@ import { PEDIDO_ESTADOS } from "./entities";
 import { StatusPill } from "./EntityPage";
 import { money, moneyCur, num, text, tr, type Tr } from "./format";
 import { EstadoPill, OfferEditor } from "./sourcing";
+import { ContactDrawer } from "./contact";
 import {
   clienteNuevo,
   deleteOferta,
@@ -409,6 +410,7 @@ function ItemDetail({
   lang: Lang; isAdmin: boolean; pedido: Pedido; onEdit: () => void; onDeleted: () => void; onChanged: () => void;
 }) {
   const [offerFor, setOfferFor] = useState<Oferta | null | "new">(null);
+  const [contact, setContact] = useState<Oferta | null>(null);
   const [confirmDel, setConfirmDel] = useState(false);
   const bc = bestCost(pedido);
 
@@ -468,7 +470,7 @@ function ItemDetail({
                     </div>
                     <div className="offer__price"><span className="offer__eur">{moneyCur(o.precio, o.moneda, lang)}</span></div>
                     <div className="offer__actions">
-                      {o.email && <a className="chipbtn" href={"mailto:" + o.email} title={o.email}>✉ {tr(C.write, lang)}</a>}
+                      <button type="button" className="chipbtn chipbtn--contact" onClick={() => setContact(o)} title={o.email ?? ""}>✉ {lang === "es" ? "Contactar" : "Contact"}</button>
                       {o.enlace && <a className="chipbtn" href={o.enlace.startsWith("http") ? o.enlace : "https://" + o.enlace} target="_blank" rel="noopener noreferrer">↗ {tr(C.visit, lang)}</a>}
                       {!o.elegida && <button type="button" className="chipbtn" onClick={async () => { await setElegida(pedido.id, o.id); onChanged(); }}>{tr(C.choose, lang)}</button>}
                       <button type="button" className="chipbtn" onClick={() => setOfferFor(o)}>{tr(C.edit, lang)}</button>
@@ -483,6 +485,11 @@ function ItemDetail({
         </div>
       </div>
 
+      {contact && (
+        <ContactDrawer lang={lang} part={{ mpn: pedido.mpn, descripcion: pedido.descripcion, unidades: pedido.unidades }}
+          target={{ ofertaId: contact.id, estado: contact.estado, proveedor: contact.proveedor ?? "", email: contact.email, pais: contact.pais }}
+          onClose={() => setContact(null)} onSent={() => { setContact(null); onChanged(); }} />
+      )}
       {offerFor && (
         <OfferEditor lang={lang} pedidoId={pedido.id} oferta={offerFor === "new" ? null : offerFor}
           onClose={() => setOfferFor(null)} onSaved={() => { setOfferFor(null); onChanged(); }} />

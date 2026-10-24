@@ -3,6 +3,7 @@ import type { Lang } from "../i18n";
 import { supabase } from "../auth";
 import { moneyCur, num, text, tr, type Tr } from "./format";
 import { Drawer, EstadoPill, OfferEditor } from "./sourcing";
+import { ContactBtn, ContactDrawer } from "./contact";
 import type { Oferta } from "./pedidos-data";
 
 const C = {
@@ -163,6 +164,7 @@ function RefDetail({ lang, isAdmin, id, onBack, onOpenProv, onOpenClient, onChan
   const [ofertas, setOfertas] = useState<OfertaFull[] | null>(null);
   const [editing, setEditing] = useState(false);
   const [offer, setOffer] = useState<OfertaFull | "new" | null>(null);
+  const [contact, setContact] = useState<OfertaFull | null>(null);
   const [askDel, setAskDel] = useState(false);
 
   const load = useCallback(async () => {
@@ -218,6 +220,7 @@ function RefDetail({ lang, isAdmin, id, onBack, onOpenProv, onOpenClient, onChan
                   <th className="is-right">{tr(C.colPrice, lang)}</th>
                   <th className="is-optional">{tr(C.colAvail, lang)}</th>
                   <th>{tr(C.colState, lang)}</th>
+                  <th aria-label="✉" />
                 </tr>
               </thead>
               <tbody>
@@ -239,6 +242,7 @@ function RefDetail({ lang, isAdmin, id, onBack, onOpenProv, onOpenClient, onChan
                       <td data-label={tr(C.colPrice, lang)} className="is-right is-mono">{moneyCur(o.precio, o.moneda, lang)}</td>
                       <td data-label={tr(C.colAvail, lang)} className="is-optional">{text(o.disponibilidad)}</td>
                       <td data-label={tr(C.colState, lang)}><EstadoPill estado={o.estado} lang={lang} /></td>
+                      <td className="is-right"><ContactBtn lang={lang} onClick={() => setContact(o)} /></td>
                     </tr>
                   );
                 })}
@@ -248,6 +252,11 @@ function RefDetail({ lang, isAdmin, id, onBack, onOpenProv, onOpenClient, onChan
         )}
       </div>
 
+      {contact && (
+        <ContactDrawer lang={lang} part={{ mpn: ref.mpn, fabricante: ref.fabricante, descripcion: ref.descripcion, unidades: contact.pedido?.unidades }}
+          target={{ ofertaId: contact.id, estado: contact.estado, proveedor: contact.prov?.nombre ?? contact.proveedor ?? "", email: contact.prov?.email ?? contact.email, pais: contact.prov?.pais ?? contact.pais }}
+          onClose={() => setContact(null)} onSent={() => { setContact(null); load(); onChanged(); }} />
+      )}
       {editing && <RefDrawer lang={lang} ref0={ref} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); load(); onChanged(); }} />}
       {offer && (
         <OfferEditor lang={lang} referenciaId={id} oferta={offer === "new" ? null : offer}

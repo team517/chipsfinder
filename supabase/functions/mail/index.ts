@@ -146,6 +146,35 @@ Deno.serve(async (req) => {
         return ok({ messageId: info.messageId });
       }
 
+      case "ai": {
+        // Redacta (task "rfq") o traduce (task "translate") un correo a proveedor
+        const lang = body.lang === "es" ? "es" : "en";
+        const langName = lang === "es" ? "Spanish (Spain)" : "English";
+        let system: string, user: string;
+        if (body.task === "translate") {
+          system = `You translate business emails into ${langName}. Keep the exact structure: greeting, paragraphs, bullet and numbered lists, line breaks and the signature block (names, company, email, web stay unchanged). Natural, professional tone. Reply only with JSON {"subject": string, "body": string}; body is plain text.`;
+          user = JSON.stringify({ subject: String(body.subject ?? ""), body: String(body.body ?? "") });
+        } else {
+          system = [
+            `You write purchase enquiry (RFQ) emails in ${langName} for ChipsFinder, an electronic components sourcing company, to a supplier or distributor.`,
+            "Structure, as plain text with blank lines between blocks:",
+            "1) Greeting (Dear <supplier> team, / Estimado equipo de <supplier>,). 2) One short polite line and one line saying we are sourcing this part for a customer.",
+            "3) Part details as a bullet list with • (part number, manufacturer, description if given, quantity).",
+            "4) A numbered list asking exactly the questions requested. 5) A short closing line thanking them and asking for their best offer.",
+            "6) The signature block exactly as provided.",
+            "Never mention the name of our customer. Be concise, warm and professional. No markdown, no asterisks.",
+            'Reply only with JSON {"subject": string, "body": string}. Subject like "RFQ – <MPN> – <qty> pcs" (Spanish: "Solicitud de oferta – <MPN> – <qty> uds.").',
+          ].join("\n");
+          user = JSON.stringify({
+            supplier: String(body.supplier ?? ""), part: body.part ?? {}, questions: Array.isArray(body.questions) ? body.questions : [],
+            signature: String(body.signature ?? "ChipsFinder"), extra_note: String(body.note ?? ""),
+          });
+        }
+        const r = await llm(system, user);
+        if (!r.ok) return fail(r.error);
+        return ok({ subject: r.subject, body: r.body });
+      }
+
       case "delete": {
         // Borra correos: en Gmail se mueven a la Papelera (así no vuelven con la sincronización)
         const ids = Array.isArray(body.ids) ? (body.ids as unknown[]).map(String).slice(0, 500) : [];
@@ -467,4 +496,35 @@ function buildRow(parsed: any, uid: number, folder: string, direction: string, b
     seen: direction === "out",
     cliente_id,
   };
+}
+
+// ---------- IA para redactar / traducir (OpenAI o DeepSeek, la clave que haya) ----------
+async function llm(system: string, user: string): Promise<{ ok: true; subject: string; body: string } | { ok: false; error: string }> {
+  const openai = Deno.env.get("OPENAI_API_KEY");
+  const deepseek = Deno.env.get("DEEPSEEK_API_KEY");
+  const conf = openai
+    ? { url: "https://api.openai.com/v1/chat/completions", key: openai, model: Deno.env.get("OPENAI_MODEL") ?? "gpt-4o-mini" }
+    : deepseek
+      ? { url: "https://api.deepseek.com/chat/completions", key: deepseek, model: "deepseek-chat" }
+      : null;
+  if (!conf) return { ok: false, error: "no_key" };
+  try {
+    const res = await withTimeout(fetch(conf.url, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${conf.key}` },
+      body: JSON.stringify({
+        model: conf.model, temperature: 0.4, response_format: { type: "json_object" },
+        messages: [{ role: "system", content: system }, { role: "user", content: user }],
+      }),
+    }), 40_000);
+    if (!res.ok) return { ok: false, error: "ai_" + res.status };
+    const data = await res.json();
+    const out = JSON.parse(data?.choices?.[0]?.message?.content ?? "{}");
+    const subject = String(out.subject ?? "").trim();
+    const text = String(out.body ?? "").replace(/\r\n/g, "\n").trim();
+    if (!text) return { ok: false, error: "ai_empty" };
+    return { ok: true, subject, body: text };
+  } catch {
+    return { ok: false, error: "ai_error" };
+  }
 }

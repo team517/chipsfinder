@@ -3,6 +3,7 @@ import type { Lang } from "../i18n";
 import { supabase } from "../auth";
 import { moneyCur, num, text, tr, type Tr } from "./format";
 import { Drawer, EstadoPill, OfferEditor } from "./sourcing";
+import { ContactBtn, ContactDrawer, type ContactPart } from "./contact";
 import type { Oferta } from "./pedidos-data";
 
 const C = {
@@ -279,6 +280,7 @@ function RefSuppliers({ lang, pedidoId, onBack, onOpenProv, onChanged }: {
   const [ped, setPed] = useState<{ mpn: string | null; descripcion: string | null; unidades: string | null; notas: string | null; cliente: { nombre: string } | null; referencia: { mpn: string; fabricante: string | null } | null } | null>(null);
   const [ofs, setOfs] = useState<OfProv[] | null>(null);
   const [offer, setOffer] = useState<OfProv | "new" | null>(null);
+  const [contact, setContact] = useState<OfProv | null>(null);
 
   const load = useCallback(async () => {
     const [p, o] = await Promise.all([
@@ -317,6 +319,7 @@ function RefSuppliers({ lang, pedidoId, onBack, onOpenProv, onChanged }: {
                 <th className="is-right">{tr(K.colPrice, lang)}</th>
                 <th className="is-optional">{tr(K.colAvail, lang)}</th>
                 <th>{tr(K.colStatus, lang)}</th>
+                <th aria-label="✉" />
               </tr></thead>
               <tbody>
                 {ofs.map((o) => {
@@ -337,6 +340,7 @@ function RefSuppliers({ lang, pedidoId, onBack, onOpenProv, onChanged }: {
                       <td data-label={tr(K.colPrice, lang)} className="is-right is-mono">{moneyCur(o.precio, o.moneda, lang)}</td>
                       <td data-label={tr(K.colAvail, lang)} className="is-optional">{text(o.disponibilidad)}</td>
                       <td data-label={tr(K.colStatus, lang)}><EstadoPill estado={o.estado} lang={lang} /></td>
+                      <td className="is-right"><ContactBtn lang={lang} onClick={() => setContact(o)} /></td>
                     </tr>
                   );
                 })}
@@ -345,6 +349,11 @@ function RefSuppliers({ lang, pedidoId, onBack, onOpenProv, onChanged }: {
           </div>
         )}
       </div>
+      {contact && (
+        <ContactDrawer lang={lang} part={{ mpn: ped.referencia?.mpn ?? ped.mpn, fabricante: ped.referencia?.fabricante, descripcion: ped.descripcion, unidades: ped.unidades }}
+          target={{ ofertaId: contact.id, estado: contact.estado, proveedor: contact.prov?.nombre ?? contact.proveedor ?? "", email: contact.prov?.email ?? contact.email, pais: contact.prov?.pais ?? contact.pais }}
+          onClose={() => setContact(null)} onSent={() => { setContact(null); load(); onChanged(); }} />
+      )}
       {offer && (
         <OfferEditor lang={lang} pedidoId={pedidoId} oferta={offer === "new" ? null : offer}
           onClose={() => setOffer(null)} onSaved={() => { setOffer(null); load(); onChanged(); }} />
@@ -436,6 +445,7 @@ function ProvDetail({ lang, isAdmin, id, onBack, onOpenClient, onChanged }: {
   const [ofertas, setOfertas] = useState<OfertaFull[] | null>(null);
   const [editing, setEditing] = useState(false);
   const [offer, setOffer] = useState<OfertaFull | "new" | null>(null);
+  const [contact, setContact] = useState<OfertaFull | null>(null);
   const [askDel, setAskDel] = useState(false);
 
   const load = useCallback(async () => {
@@ -499,6 +509,7 @@ function ProvDetail({ lang, isAdmin, id, onBack, onOpenClient, onChanged }: {
                   <th className="is-right">{tr(C.colPrice, lang)}</th>
                   <th className="is-optional">{tr(C.colAvail, lang)}</th>
                   <th>{tr(C.colState, lang)}</th>
+                  <th aria-label="✉" />
                 </tr>
               </thead>
               <tbody>
@@ -517,6 +528,7 @@ function ProvDetail({ lang, isAdmin, id, onBack, onOpenClient, onChanged }: {
                     <td data-label={tr(C.colPrice, lang)} className="is-right is-mono">{moneyCur(o.precio, o.moneda, lang)}</td>
                     <td data-label={tr(C.colAvail, lang)} className="is-optional">{text(o.disponibilidad)}</td>
                     <td data-label={tr(C.colState, lang)}><EstadoPill estado={o.estado} lang={lang} /></td>
+                    <td className="is-right"><ContactBtn lang={lang} onClick={() => setContact(o)} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -525,6 +537,11 @@ function ProvDetail({ lang, isAdmin, id, onBack, onOpenClient, onChanged }: {
         )}
       </div>
 
+      {contact && (
+        <ContactDrawer lang={lang} part={{ mpn: contact.referencia?.mpn ?? null, fabricante: contact.referencia?.fabricante, descripcion: contact.referencia?.descripcion, unidades: contact.pedido?.unidades } as ContactPart}
+          target={{ ofertaId: contact.id, estado: contact.estado, proveedor: prov.nombre, email: prov.email ?? contact.email, pais: prov.pais }}
+          onClose={() => setContact(null)} onSent={() => { setContact(null); load(); onChanged(); }} />
+      )}
       {editing && <ProvDrawer lang={lang} prov={prov} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); load(); onChanged(); }} />}
       {offer && (
         <OfferEditor lang={lang} proveedorId={id} oferta={offer === "new" ? null : offer}
