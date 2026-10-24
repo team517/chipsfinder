@@ -31,7 +31,20 @@ Abre http://localhost:5180
 
 ### Dar de alta y gestionar cuentas
 
-Necesita `.env.supabase.local` con `SUPABASE_URL` y `SUPABASE_SECRET_KEY` (nunca se sube a git).
+Lo normal es hacerlo **desde el panel**: un administrador entra en **Equipo** y pulsa "Nuevo acceso"
+(elige rol y si crea una contraseña temporal o envía invitación). Allí también puede cambiar el rol,
+desactivar/reactivar o borrar cuentas. Nadie puede desactivarse, borrarse ni quitarse el rol a sí mismo.
+
+Esto lo hace la función de servidor `supabase/functions/team` (usa la clave secreta, que nunca llega
+al navegador, y solo responde a administradores @chipsfinder.es). Se despliega con:
+
+```bash
+supabase functions deploy team --project-ref vwybcwidffcnpcjlehxv --use-api
+```
+
+Cada persona cambia **su propia contraseña** en **Mi cuenta** (pulsando su correo abajo a la izquierda).
+
+También se puede dar de alta por terminal, con `.env.supabase.local` (nunca se sube a git):
 
 ```bash
 node scripts/usuarios.mjs invitar nombre@chipsfinder.es          # le llega un correo para crear su contraseña
@@ -83,6 +96,8 @@ Al iniciar sesión se ve "Sesión iniciada · Cargando el panel…" y se entra a
 | 03 Referencias | Catálogo: MPN, fabricante, encapsulado, stock, precio, ubicación | `referencias` |
 | 04 Proveedores | Fabricantes, distribuidores y brokers, con valoración | `proveedores` |
 | 05 Clientes | Empresas, contacto y número de pedidos | `clientes` |
+| 06 Equipo (solo admin) | Dar de alta accesos, cambiar el rol, activar/desactivar y borrar cuentas | Supabase Auth |
+| Mi cuenta | Cada persona cambia su propia contraseña | Supabase Auth |
 
 - Cada sección tiene buscador, filtros por estado y una ficha lateral para crear y editar.
 - Leer, crear y editar: cualquier cuenta @chipsfinder.es. **Borrar: solo administradores.**

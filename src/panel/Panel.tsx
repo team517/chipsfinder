@@ -6,6 +6,9 @@ import { roleOf, supabase } from "../auth";
 import { ENTITIES, NAV, SECTION_CODE, SECTION_TITLE, type EntityId, type SectionId } from "./entities";
 import EntityPage from "./EntityPage";
 import Home from "./Home";
+import TeamPage from "./TeamPage";
+import Account from "./Account";
+import { listUsers } from "./team";
 import { tr, type Tr } from "./format";
 
 const C = {
@@ -17,16 +20,25 @@ const C = {
   team: ["Equipo", "Team"] as Tr,
   lang: ["Idioma", "Language"] as Tr,
   main: ["Secciones", "Sections"] as Tr,
+  adminGroup: ["Administración", "Administration"] as Tr,
+  equipo: ["Equipo", "Team"] as Tr,
+  account: ["Mi cuenta", "My account"] as Tr,
+  openAccount: ["Ver mi cuenta", "View my account"] as Tr,
 };
 
-const SECTIONS: SectionId[] = ["inicio", "pedidos", "lotes", "referencias", "proveedores", "clientes"];
+type PanelSection = SectionId | "equipo" | "cuenta";
 
-type Route = { section: SectionId; id: string | null };
+const EXTRA: Record<"equipo" | "cuenta", Tr> = { equipo: C.equipo, cuenta: C.account };
+
+const RECOGNISED: PanelSection[] = ["inicio", "pedidos", "lotes", "referencias", "proveedores", "clientes", "equipo", "cuenta"];
+
+type Route = { section: PanelSection; id: string | null };
 
 function readRoute(): Route {
   const parts = window.location.pathname.replace(/^\/panel\/?/, "").split("/").filter(Boolean);
-  const section = (SECTIONS as string[]).includes(parts[0] ?? "") ? (parts[0] as SectionId) : "inicio";
-  return { section, id: section === "inicio" ? null : parts[1] ?? null };
+  const section = (RECOGNISED as string[]).includes(parts[0] ?? "") ? (parts[0] as PanelSection) : "inicio";
+  const hasId = section !== "inicio" && section !== "cuenta";
+  return { section, id: hasId ? parts[1] ?? null : null };
 }
 
 function routePath(r: Route) {
@@ -34,7 +46,11 @@ function routePath(r: Route) {
   return "/panel/" + r.section + (r.id ? "/" + r.id : "");
 }
 
-type Counts = Partial<Record<EntityId, number>>;
+function sectionTitle(s: PanelSection): Tr {
+  return s === "equipo" || s === "cuenta" ? EXTRA[s] : SECTION_TITLE[s];
+}
+
+type Counts = Partial<Record<EntityId, number>> & { equipo?: number };
 
 export default function Panel({ session, onSignOut }: { session: Session; onSignOut: () => void }) {
   const [lang, setLangState] = useState<Lang>(initialLang);
@@ -52,7 +68,7 @@ export default function Panel({ session, onSignOut }: { session: Session; onSign
   }, [lang]);
 
   useEffect(() => {
-    document.title = "ChipsFinder · " + tr(SECTION_TITLE[route.section], lang);
+    document.title = "ChipsFinder · " + tr(sectionTitle(route.section), lang);
   }, [route.section, lang]);
 
   useEffect(() => {
@@ -71,6 +87,11 @@ export default function Panel({ session, onSignOut }: { session: Session; onSign
     setMenuOpen(false);
   }, []);
 
+  // Quien no es administrador no puede entrar en Equipo
+  useEffect(() => {
+    if (route.section === "equipo" && !isAdmin) navigate({ section: "inicio", id: null }, true);
+  }, [route.section, isAdmin, navigate]);
+
   // Números del menú lateral
   const loadCounts = useCallback(async () => {
     const ids = Object.keys(ENTITIES) as EntityId[];
@@ -81,8 +102,12 @@ export default function Panel({ session, onSignOut }: { session: Session; onSign
     ids.forEach((id, i) => {
       if (!res[i].error) next[id] = res[i].count ?? 0;
     });
+    if (isAdmin) {
+      const u = await listUsers();
+      if (u.ok) next.equipo = u.users.length;
+    }
     setCounts(next);
-  }, []);
+  }, [isAdmin]);
 
   useEffect(() => {
     loadCounts();
@@ -100,42 +125,57 @@ export default function Panel({ session, onSignOut }: { session: Session; onSign
     setLangState(l);
   };
 
+  const navItem = (s: PanelSection, code: string, label: Tr, n?: number) => {
+    const active = route.section === s;
+    return (
+      <li key={s}>
+        <a
+          href={routePath({ section: s, id: null })}
+          className={"nav-item" + (active ? " is-active" : "")}
+          aria-current={active ? "page" : undefined}
+          onClick={(e) => {
+            e.preventDefault();
+            navigate({ section: s, id: null });
+          }}
+        >
+          <span className="nav-item__code">{code}</span>
+          <span className="nav-item__label">{tr(label, lang)}</span>
+          {n !== undefined && <span className="nav-item__n">{n}</span>}
+        </a>
+      </li>
+    );
+  };
+
   const sidebar = (
     <nav className="sb-nav" aria-label={tr(C.main, lang)}>
       {NAV.map((g) => (
         <div className="nav-group" key={g.group[0]}>
           <span className="nav-group__label">{tr(g.group, lang)}</span>
           <ul>
-            {g.items.map((s) => {
-              const active = route.section === s;
-              const n = s === "inicio" ? undefined : counts[s];
-              return (
-                <li key={s}>
-                  <a
-                    href={routePath({ section: s, id: null })}
-                    className={"nav-item" + (active ? " is-active" : "")}
-                    aria-current={active ? "page" : undefined}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      navigate({ section: s, id: null });
-                    }}
-                  >
-                    <span className="nav-item__code">{SECTION_CODE[s]}</span>
-                    <span className="nav-item__label">{tr(SECTION_TITLE[s], lang)}</span>
-                    {n !== undefined && <span className="nav-item__n">{n}</span>}
-                  </a>
-                </li>
-              );
-            })}
+            {g.items.map((s) =>
+              navItem(s, SECTION_CODE[s], SECTION_TITLE[s], s === "inicio" ? undefined : counts[s as EntityId]),
+            )}
           </ul>
         </div>
       ))}
+      {isAdmin && (
+        <div className="nav-group">
+          <span className="nav-group__label">{tr(C.adminGroup, lang)}</span>
+          <ul>{navItem("equipo", "06", C.equipo, counts.equipo)}</ul>
+        </div>
+      )}
     </nav>
   );
 
+  const accountActive = route.section === "cuenta";
   const userBox = (
     <div className="sb-user">
-      <div className="sb-user__who">
+      <button
+        type="button"
+        className={"sb-user__who" + (accountActive ? " is-active" : "")}
+        onClick={() => navigate({ section: "cuenta", id: null })}
+        aria-label={tr(C.openAccount, lang)}
+      >
         <span className="sb-user__avatar" aria-hidden="true">
           {name.slice(0, 1)}
         </span>
@@ -145,7 +185,13 @@ export default function Panel({ session, onSignOut }: { session: Session; onSign
           </span>
           <span className={"sb-user__role" + (isAdmin ? " is-admin" : "")}>{tr(isAdmin ? C.admin : C.team, lang)}</span>
         </span>
-      </div>
+        <span className="sb-user__cog" aria-hidden="true">
+          <svg viewBox="0 0 16 16" width="14" height="14">
+            <path d="M6 2.2l.5-1.4h3l.5 1.4 1.3.5 1.4-.6 2 2-.6 1.4.5 1.3 1.4.5v2.8l-1.4.5-.5 1.3.6 1.4-2 2-1.4-.6-1.3.5-.5 1.4h-3l-.5-1.4-1.3-.5-1.4.6-2-2 .6-1.4-.5-1.3L.8 9.4V6.6l1.4-.5.5-1.3-.6-1.4 2-2 1.4.6z" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+            <circle cx="8" cy="8" r="2.2" fill="none" stroke="currentColor" strokeWidth="1.2" />
+          </svg>
+        </span>
+      </button>
       <div className="sb-user__actions">
         <div className="langs langs--sm" role="group" aria-label={tr(C.lang, lang)}>
           {(["es", "en"] as const).map((code) => (
@@ -195,7 +241,7 @@ export default function Panel({ session, onSignOut }: { session: Session; onSign
           </button>
           <span className="topbar__crumb">
             CHF/INT <span className="topbar__sep">/</span>{" "}
-            <span className="topbar__here">{tr(SECTION_TITLE[route.section], lang)}</span>
+            <span className="topbar__here">{tr(sectionTitle(route.section), lang)}</span>
           </span>
           <span className="topbar__status">
             <span className="dot" aria-hidden="true" /> {email}
@@ -204,12 +250,11 @@ export default function Panel({ session, onSignOut }: { session: Session; onSign
 
         <main className="content">
           {route.section === "inicio" ? (
-            <Home
-              lang={lang}
-              name={name}
-              refreshKey={refreshKey}
-              go={(section, id) => navigate({ section, id: id ?? null })}
-            />
+            <Home lang={lang} name={name} refreshKey={refreshKey} go={(section, id) => navigate({ section, id: id ?? null })} />
+          ) : route.section === "cuenta" ? (
+            <Account lang={lang} session={session} />
+          ) : route.section === "equipo" ? (
+            <TeamPage lang={lang} openId={route.id} onOpen={(id: string | null) => navigate({ section: "equipo", id }, true)} />
           ) : (
             <EntityPage
               entity={ENTITIES[route.section]}

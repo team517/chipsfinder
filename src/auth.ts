@@ -188,6 +188,12 @@ export function hasStoredSession(): boolean {
   return !!sessionStore.getItem("chf-auth");
 }
 
+/** Cambia la contraseña del usuario que ya tiene la sesión abierta ("Mi cuenta"). */
+export async function changePassword(password: string): Promise<Result> {
+  const { error } = await supabase.auth.updateUser({ password });
+  return error ? { ok: false, error: mapError(error) } : { ok: true };
+}
+
 export async function getSession(): Promise<Session | null> {
   const { data } = await supabase.auth.getSession();
   return data.session;

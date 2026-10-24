@@ -1114,3 +1114,135 @@ select.input option {
   place-items: center;
   background: var(--panel-bg);
 }
+
+/* ---------- Equipo y Mi cuenta ---------- */
+.page-sec--narrow {
+  max-width: 720px;
+}
+.tag-you {
+  margin-left: 8px;
+  font-family: var(--f-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+  border: 1px solid #f0503c55;
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+.meta--col {
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 0;
+  border-top: 0;
+}
+.meta--col > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line-2);
+}
+.meta--col > div:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+.meta--col dd {
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+.choices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  background: #000;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--ink-2);
+  transition: border-color 0.15s, background 0.15s;
+}
+.choice:hover {
+  border-color: #ffffff33;
+}
+.choice.is-on {
+  border-color: var(--accent);
+  background: #f0503c0f;
+  color: var(--ink);
+}
+.choice input {
+  margin-top: 2px;
+  accent-color: var(--accent);
+}
+
+.temp {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  background: #f0503c0f;
+  border: 1px solid #f0503c55;
+  border-radius: 4px;
+}
+.temp__label {
+  font-family: var(--f-display);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.temp__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.temp__value {
+  flex: 1;
+  font-family: var(--f-mono);
+  font-size: 18px;
+  letter-spacing: 0.04em;
+  color: #fff;
+  word-break: break-all;
+}
+
+.useractions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.useractions__row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.useractions .btn {
+  align-self: flex-start;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.card__head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.card__foot {
+  display: flex;
+  justify-content: flex-end;
+}
