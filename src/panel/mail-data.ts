@@ -66,7 +66,7 @@ async function call<T = Record<string, unknown>>(action: string, payload: Record
 export const mailStatus = () => call<MailStatus>("status");
 export const mailConnect = (address: string, app_password: string) => call("connect", { address, app_password });
 export const mailDisconnect = () => call("disconnect");
-export const mailSync = (limit = 60) => call<{ nuevos: number }>("sync", { limit });
+export const mailSync = (limit = 40) => call<{ nuevos: number; pending: number }>("sync", { limit });
 export const mailSend = (p: {
   to: string; subject: string; html: string; text?: string;
   inReplyTo?: string; references?: string; threadId?: string; clienteId?: string;
@@ -110,17 +110,29 @@ export async function fetchThreads(): Promise<{ ok: boolean; threads: Thread[] }
   return { ok: true, threads: [...map.values()] };
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function fetchThread(threadId: string): Promise<{ ok: boolean; mensajes: Mensaje[] }> {
-  const { data, error } = await supabase
+  // El id del hilo suele ser un Message-ID ("<abc@mail.gmail.com>"): se filtra con eq,
+  // que escapa bien esos caracteres (un .or() con ellos daba error 400).
+  const byThread = await supabase
     .from("mensajes")
     .select("*, cliente:clientes(nombre)")
-    .or(`thread_id.eq.${threadId},id.eq.${threadId}`)
+    .eq("thread_id", threadId)
     .order("fecha", { ascending: true })
     .limit(500);
-  if (error) return { ok: false, mensajes: [] };
-  return { ok: true, mensajes: (data ?? []) as unknown as Mensaje[] };
+  if (byThread.error) return { ok: false, mensajes: [] };
+  let rows = (byThread.data ?? []) as unknown as Mensaje[];
+  // Correos sin hilo: el "hilo" es el propio mensaje
+  if (rows.length === 0 && UUID_RE.test(threadId)) {
+    const byId = await supabase.from("mensajes").select("*, cliente:clientes(nombre)").eq("id", threadId).limit(1);
+    if (byId.error) return { ok: false, mensajes: [] };
+    rows = (byId.data ?? []) as unknown as Mensaje[];
+  }
+  return { ok: true, mensajes: rows };
 }
 
 export async function markThreadSeen(threadId: string) {
   await supabase.from("mensajes").update({ seen: true }).eq("thread_id", threadId).eq("direction", "in").eq("seen", false);
+  if (UUID_RE.test(threadId)) await supabase.from("mensajes").update({ seen: true }).eq("id", threadId).eq("seen", false);
 }

@@ -19,7 +19,14 @@ const C = {
   title: ["Unibox", "Unibox"] as Tr,
   intro: ["Todos los correos en un sitio. Responde en el mismo hilo; cada conversación se enlaza con su cliente.", "All your email in one place. Reply in the same thread; each conversation links to its client."] as Tr,
   sync: ["Sincronizar", "Sync"] as Tr,
-  syncing: ["Sincronizando…", "Syncing…"] as Tr,
+  syncing: ["Importando…", "Importing…"] as Tr,
+  importAll: ["Importar todo", "Import all"] as Tr,
+  forward: ["Reenviar", "Forward"] as Tr,
+  fwdTitle: ["Reenviar correo", "Forward email"] as Tr,
+  fwdTo: ["Para (correo)", "To (email)"] as Tr,
+  fwdNote: ["Mensaje (opcional)", "Message (optional)"] as Tr,
+  fwdOriginal: ["Se reenvía el correo original debajo.", "The original email is forwarded below."] as Tr,
+  fwdErrTo: ["Escribe el correo del destinatario.", "Enter the recipient's email."] as Tr,
   lastSync: ["Última sincronización", "Last sync"] as Tr,
   never: ["nunca", "never"] as Tr,
   loading: ["Cargando…", "Loading…"] as Tr,
@@ -31,6 +38,10 @@ const C = {
   replyPlaceholder: ["Escribe tu respuesta…", "Write your reply…"] as Tr,
   send: ["Enviar", "Send"] as Tr,
   sending: ["Enviando…", "Sending…"] as Tr,
+  cancel: ["Cancelar", "Cancel"] as Tr,
+  close: ["Cerrar", "Close"] as Tr,
+  retry: ["Reintentar", "Retry"] as Tr,
+  threadErr: ["No se pudo abrir esta conversación.", "Could not open this conversation."] as Tr,
   sent: ["Enviado", "Sent"] as Tr,
   sendErr: ["No se pudo enviar. Inténtalo de nuevo.", "Could not send. Try again."] as Tr,
   you: ["Tú", "You"] as Tr,
@@ -162,6 +173,7 @@ function Inbox({ lang, isAdmin, status, onStatus, onOpenClient }: {
   const [sel, setSel] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [syncing, setSyncing] = useState(false);
+  const [left, setLeft] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     const r = await fetchThreads();
@@ -180,8 +192,22 @@ function Inbox({ lang, isAdmin, status, onStatus, onOpenClient }: {
   async function doSync() {
     if (syncing) return;
     setSyncing(true);
-    await mailSync(80);
+    setLeft(null);
+    // Importa en lotes pequeños (la función tiene poca CPU por llamada) hasta traer TODO
+    let fails = 0;
+    for (let i = 0; i < 400; i++) {
+      const r = await mailSync(5);
+      if (!r.ok) {
+        if (++fails >= 3) break;
+        continue;
+      }
+      fails = 0;
+      setLeft(r.pending ?? 0);
+      if (i % 2 === 0 || !r.pending) await load();
+      if (!r.pending || r.pending <= 0) break;
+    }
     setSyncing(false);
+    setLeft(null);
     await load();
     onStatus();
   }
@@ -200,14 +226,14 @@ function Inbox({ lang, isAdmin, status, onStatus, onOpenClient }: {
           <p className="sec-intro">{tr(C.connectedAs, lang)} <b>{status.address}</b> · {tr(C.lastSync, lang)}: {status.last_sync ? when(status.last_sync, lang) : tr(C.never, lang)}</p>
         </div>
         <div className="item-detail__actions">
-          <button type="button" className={"btn btn--primary btn--sm" + (syncing ? " btn--busy" : "")} onClick={doSync} aria-busy={syncing}>{syncing && <span className="spinner" aria-hidden="true" />}{tr(syncing ? C.syncing : C.sync, lang)}</button>
+          <button type="button" className={"btn btn--primary btn--sm" + (syncing ? " btn--busy" : "")} onClick={doSync} aria-busy={syncing}>{syncing && <span className="spinner" aria-hidden="true" />}{tr(syncing ? C.syncing : C.sync, lang)}{syncing && left ? " · " + left : ""}</button>
           {isAdmin && <button type="button" className="btn btn--ghost btn--sm" onClick={async () => { await mailDisconnect(); onStatus(); }}>{tr(C.disconnect, lang)}</button>}
         </div>
       </header>
 
       <div className="unibox">
         <div className={"unibox__list" + (sel ? " is-hidden-mobile" : "")}>
-          <label className="search">
+          <label className="search search--sm">
             <span className="sr-only">{tr(C.search, lang)}</span>
             <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" strokeWidth="1.5" /><path d="M11 11l3.5 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
             <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={tr(C.search, lang)} className="search__input" />
@@ -261,6 +287,7 @@ function ThreadView({ lang, threadId, onBack, onChanged, onOpenClient, fromAddre
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [err, setErr] = useState(false);
+  const [fwd, setFwd] = useState<Mensaje | null>(null);
 
   const load = useCallback(async () => {
     const r = await fetchThread(threadId);
@@ -274,6 +301,19 @@ function ThreadView({ lang, threadId, onBack, onChanged, onOpenClient, fromAddre
   }, [load]);
 
   if (msgs === null) return <div className="state">{tr(C.loading, lang)}</div>;
+  if (msgs.length === 0) {
+    return (
+      <div className="thread">
+        <div className="thread__head">
+          <button type="button" className="backlink thread__back" onClick={onBack}>←</button>
+          <div className="thread__headtext"><span className="thread__subject">—</span></div>
+        </div>
+        <div className="state">
+          {tr(C.threadErr, lang)} <button type="button" className="linkbtn" onClick={load}>{tr(C.retry, lang)}</button>
+        </div>
+      </div>
+    );
+  }
   const head = msgs[0];
   const lastIn = [...msgs].reverse().find((m) => m.direction === "in") ?? msgs[msgs.length - 1];
   const cliente = msgs.find((m) => m.cliente_id);
@@ -317,8 +357,10 @@ function ThreadView({ lang, threadId, onBack, onChanged, onOpenClient, fromAddre
       </div>
 
       <div className="thread__msgs">
-        {msgs.map((m) => <Message key={m.id} m={m} lang={lang} mine={m.direction === "out"} fromAddress={fromAddress} />)}
+        {msgs.map((m) => <Message key={m.id} m={m} lang={lang} mine={m.direction === "out"} fromAddress={fromAddress} onForward={() => setFwd(m)} />)}
       </div>
+
+      {fwd && <ForwardModal lang={lang} original={fwd} clienteId={cliente?.cliente_id ?? undefined} onClose={() => setFwd(null)} onSent={() => { setFwd(null); load(); }} />}
 
       <form className="reply" onSubmit={send}>
         <textarea className="input reply__text" rows={3} value={reply} onChange={(e) => { setReply(e.target.value); setSent(false); }} placeholder={tr(C.replyPlaceholder, lang)} />
@@ -333,16 +375,33 @@ function ThreadView({ lang, threadId, onBack, onChanged, onOpenClient, fromAddre
   );
 }
 
-function Message({ m, lang, mine, fromAddress }: { m: Mensaje; lang: Lang; mine: boolean; fromAddress: string }) {
+function Message({ m, lang, mine, fromAddress, onForward }: { m: Mensaje; lang: Lang; mine: boolean; fromAddress: string; onForward: () => void }) {
   const ref = useRef<HTMLIFrameElement | null>(null);
+  const light = typeof document !== "undefined" && document.documentElement.getAttribute("data-theme") === "light";
+  const ink = light ? "#1a1a1a" : "#e8e8e8";
+  const quote = light ? "#666" : "#aaa";
+  const link = light ? "#2b50c8" : "#8ea8ff";
   const html = m.body_html || (m.body_text ? "<pre style='white-space:pre-wrap;font-family:inherit'>" + m.body_text.replace(/&/g, "&amp;").replace(/</g, "&lt;") + "</pre>" : "<i>(sin contenido)</i>");
-  const doc = `<!doctype html><meta charset="utf-8"><base target="_blank"><style>html,body{margin:0;padding:0;color:#e8e8e8;background:transparent;font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;word-wrap:break-word;overflow-wrap:anywhere}a{color:#8ea8ff}img{max-width:100%;height:auto}blockquote{border-left:2px solid #444;margin:0;padding-left:12px;color:#aaa}*{max-width:100%}</style>${html}`;
+  const doc = `<!doctype html><meta charset="utf-8"><base target="_blank"><style>html,body{margin:0;padding:0;color:${ink};background:transparent;font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;word-wrap:break-word;overflow-wrap:anywhere}a{color:${link}}img{max-width:100%;height:auto}blockquote{border-left:2px solid ${quote};margin:0;padding-left:12px;color:${quote}}*{max-width:100%}</style>${html}`;
 
+  // El iframe crece hasta la altura real del correo y se reajusta cuando cargan las imágenes
+  function fit() {
+    try {
+      const f = ref.current;
+      const d = f?.contentDocument;
+      if (f && d) f.style.height = Math.max(d.documentElement.scrollHeight, d.body?.scrollHeight ?? 0) + 4 + "px";
+    } catch { /* opaco */ }
+  }
   function onLoad() {
+    fit();
     try {
       const d = ref.current?.contentDocument;
-      if (d) ref.current!.style.height = Math.min(d.documentElement.scrollHeight + 8, 1400) + "px";
+      if (!d) return;
+      d.querySelectorAll("img").forEach((img) => img.addEventListener("load", fit));
+      if (typeof ResizeObserver !== "undefined" && d.body) new ResizeObserver(fit).observe(d.body);
     } catch { /* opaco */ }
+    setTimeout(fit, 300);
+    setTimeout(fit, 1200);
   }
 
   return (
@@ -350,6 +409,7 @@ function Message({ m, lang, mine, fromAddress }: { m: Mensaje; lang: Lang; mine:
       <div className="msg__head">
         <span className="msg__from">{mine ? (lang === "es" ? "Tú" : "You") + " · " + fromAddress : m.from_name || m.from_email}</span>
         <span className="msg__when">{m.fecha ? new Date(m.fecha).toLocaleString(lang === "es" ? "es-ES" : "en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}</span>
+        <button type="button" className="chipbtn msg__fwd" onClick={onForward} title={tr(C.forward, lang)}>↪ {tr(C.forward, lang)}</button>
       </div>
       <iframe ref={ref} className="msg__body" sandbox="allow-same-origin" srcDoc={doc} onLoad={onLoad} title={m.subject ?? "correo"} />
       {m.adjuntos.length > 0 && (
@@ -359,5 +419,73 @@ function Message({ m, lang, mine, fromAddress }: { m: Mensaje; lang: Lang; mine:
         </div>
       )}
     </article>
+  );
+}
+
+function ForwardModal({ lang, original, clienteId, onClose, onSent }: {
+  lang: Lang; original: Mensaje; clienteId?: string; onClose: () => void; onSent: () => void;
+}) {
+  const [to, setTo] = useState("");
+  const [note, setNote] = useState("");
+  const [sending, setSending] = useState(false);
+  const [err, setErr] = useState<"to" | "send" | null>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (sending) return;
+    if (!to.trim()) return setErr("to");
+    setErr(null);
+    setSending(true);
+    const subj = "Fwd: " + (original.subject ?? "").replace(/^\s*(re|fwd):\s*/i, "");
+    const noteEsc = note.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>");
+    const cab = `${lang === "es" ? "De" : "From"}: ${original.from_name || original.from_email || ""}<br>${lang === "es" ? "Asunto" : "Subject"}: ${original.subject ?? ""}<br>${lang === "es" ? "Fecha" : "Date"}: ${original.fecha ? new Date(original.fecha).toLocaleString() : ""}`;
+    const html = `<div>${noteEsc}</div><hr><div style="color:#888;font-size:13px">---------- ${lang === "es" ? "Mensaje reenviado" : "Forwarded message"} ----------<br>${cab}</div><br>${original.body_html || (original.body_text ?? "")}`;
+    const text = note + "\n\n---------- " + (lang === "es" ? "Mensaje reenviado" : "Forwarded message") + " ----------\n" + (original.body_text ?? "");
+    const r = await mailSend({ to: to.trim(), subject: subj, html, text, clienteId });
+    setSending(false);
+    if (!r.ok) return setErr("send");
+    onSent();
+  }
+
+  return (
+    <div className="drawer" role="dialog" aria-modal="true">
+      <div className="drawer__scrim" onClick={onClose} />
+      <form className="drawer__panel" onSubmit={submit} noValidate>
+        <div className="drawer__head">
+          <div>
+            <span className="sec-eyebrow"><span className="sec-eyebrow__code">✉</span>{tr(C.forward, lang)}</span>
+            <h2 className="drawer__title">{tr(C.fwdTitle, lang)}</h2>
+          </div>
+          <button type="button" className="iconbtn" onClick={onClose} aria-label={tr(C.close, lang)}>
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+          </button>
+        </div>
+        <div className="drawer__body">
+          <div className="fgrid">
+            <div className="fcell fcell--wide">
+              <label className="field__label">{tr(C.fwdTo, lang)}</label>
+              <input className="input input--sm" type="email" value={to} onChange={(e) => { setTo(e.target.value); setErr(null); }} placeholder="destinatario@correo.com" />
+            </div>
+            <div className="fcell fcell--wide">
+              <label className="field__label">{tr(C.fwdNote, lang)}</label>
+              <textarea className="input input--sm input--area" rows={3} value={note} onChange={(e) => setNote(e.target.value)} />
+              <span className="fhint">{tr(C.fwdOriginal, lang)} «{original.subject}»</span>
+            </div>
+          </div>
+          {err && <div className="note note--error" role="alert"><span className="note__tag">ERR</span><span className="note__text">{tr(err === "to" ? C.fwdErrTo : C.sendErr, lang)}</span></div>}
+        </div>
+        <div className="drawer__foot">
+          <span className="drawer__spacer" />
+          <button type="button" className="btn btn--ghost btn--sm" onClick={onClose}>{tr(C.cancel, lang)}</button>
+          <button type="submit" className={"btn btn--primary btn--sm" + (sending ? " btn--busy" : "")} aria-busy={sending}>{sending && <span className="spinner" aria-hidden="true" />}{tr(sending ? C.sending : C.send, lang)}</button>
+        </div>
+      </form>
+    </div>
   );
 }

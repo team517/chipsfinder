@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import type { Lang } from "../i18n";
 import { initialLang, saveLang } from "../lang";
+import { getTheme, setTheme, type Theme } from "../theme";
 import { roleOf, supabase } from "../auth";
 import { ENTITIES, NAV, SECTION_CODE, SECTION_TITLE, type EntityId, type SectionId } from "./entities";
 import EntityPage from "./EntityPage";
@@ -10,6 +11,7 @@ import TeamPage from "./TeamPage";
 import Account from "./Account";
 import Pedidos from "./Pedidos";
 import Unibox from "./Unibox";
+import ErrorBoundary from "./ErrorBoundary";
 import { listUsers } from "./team";
 import { tr, type Tr } from "./format";
 
@@ -22,6 +24,8 @@ const C = {
   team: ["Equipo", "Team"] as Tr,
   lang: ["Idioma", "Language"] as Tr,
   main: ["Secciones", "Sections"] as Tr,
+  toLight: ["Modo claro", "Light mode"] as Tr,
+  toDark: ["Modo oscuro", "Dark mode"] as Tr,
   adminGroup: ["Administración", "Administration"] as Tr,
   comunicacion: ["Comunicación", "Comms"] as Tr,
   unibox: ["Unibox", "Unibox"] as Tr,
@@ -58,6 +62,7 @@ type Counts = Partial<Record<EntityId, number>> & { equipo?: number; unibox?: nu
 
 export default function Panel({ session, onSignOut }: { session: Session; onSignOut: () => void }) {
   const [lang, setLangState] = useState<Lang>(initialLang);
+  const [theme, setThemeState] = useState<Theme>(getTheme);
   const [route, setRoute] = useState<Route>(readRoute);
   const [menuOpen, setMenuOpen] = useState(false);
   const [counts, setCounts] = useState<Counts>({});
@@ -136,6 +141,12 @@ export default function Panel({ session, onSignOut }: { session: Session; onSign
   const setLang = (l: Lang) => {
     saveLang(l);
     setLangState(l);
+  };
+
+  const toggleTheme = () => {
+    const t: Theme = theme === "light" ? "dark" : "light";
+    setTheme(t);
+    setThemeState(t);
   };
 
   const navItem = (s: PanelSection, code: string, label: Tr, n?: number) => {
@@ -217,6 +228,13 @@ export default function Panel({ session, onSignOut }: { session: Session; onSign
             </button>
           ))}
         </div>
+        <button type="button" className="themebtn" onClick={toggleTheme} aria-label={tr(theme === "light" ? C.toDark : C.toLight, lang)} title={tr(theme === "light" ? C.toDark : C.toLight, lang)}>
+          {theme === "light" ? (
+            <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M13 9.5A5.5 5.5 0 0 1 6.5 3a5.5 5.5 0 1 0 6.5 6.5z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg>
+          ) : (
+            <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" strokeWidth="1.3" /><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M13 3l-1.4 1.4M4.4 11.6L3 13" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
+          )}
+        </button>
         <button type="button" className="btn btn--ghost btn--sm btn--logout" onClick={onSignOut}>
           {tr(C.logout, lang)}
         </button>
@@ -266,6 +284,7 @@ export default function Panel({ session, onSignOut }: { session: Session; onSign
         </header>
 
         <main className="content">
+          <ErrorBoundary key={route.section + "/" + (route.id ?? "")} es={lang === "es"}>
           {route.section === "inicio" ? (
             <Home lang={lang} name={name} refreshKey={refreshKey} go={(section, id) => navigate({ section, id: id ?? null })} />
           ) : route.section === "cuenta" ? (
@@ -292,6 +311,7 @@ export default function Panel({ session, onSignOut }: { session: Session; onSign
               onChanged={() => setRefreshKey((k) => k + 1)}
             />
           )}
+          </ErrorBoundary>
         </main>
       </div>
     </div>

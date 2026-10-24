@@ -12,9 +12,20 @@ import { createClient, type User } from "jsr:@supabase/supabase-js@2";
 import { ImapFlow } from "npm:imapflow@1.0.171";
 import { simpleParser } from "npm:mailparser@3.7.2";
 import nodemailer from "npm:nodemailer@6.9.16";
+import { Buffer } from "node:buffer";
 
 const DOMAIN = "@chipsfinder.es";
 const SENT_FOLDER = "[Gmail]/Sent Mail";
+const TIME_BUDGET_MS = 90_000; // cortar antes del límite de 150 s de la función
+const FULL_MAX_BYTES = 3_000_000; // por encima, solo se baja el texto (sin adjuntos pesados)
+const STEP_TIMEOUT_MS = 25_000;
+
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error("timeout")), ms);
+    p.then((v) => { clearTimeout(t); resolve(v); }, (e) => { clearTimeout(t); reject(e); });
+  });
+}
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -39,13 +50,6 @@ Deno.serve(async (req) => {
   const url = Deno.env.get("SUPABASE_URL")!;
   const anon = Deno.env.get("SUPABASE_ANON_KEY")!;
   const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-  const token = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
-  if (!token) return fail("auth");
-  const asUser = createClient(url, anon, { global: { headers: { Authorization: `Bearer ${token}` } } });
-  const { data: me, error: meErr } = await asUser.auth.getUser();
-  if (meErr || !me.user || !isTeam(me.user)) return fail("forbidden");
-
   const db = createClient(url, service, { auth: { persistSession: false, autoRefreshToken: false } });
 
   let body: Record<string, unknown> = {};
@@ -56,6 +60,23 @@ Deno.serve(async (req) => {
     const { data } = await db.from("mail_config").select("address, app_password").eq("id", 1).maybeSingle();
     return data ?? null;
   }
+
+  // Sincronización automática (pg_cron): solo puede pedir "sync", con el secreto del servidor
+  const cronSecret = Deno.env.get("CRON_SECRET");
+  if (cronSecret && req.headers.get("x-cron-secret") === cronSecret) {
+    if (action !== "sync") return fail("forbidden");
+    const cfg = await getConfig();
+    if (!cfg) return ok({ skipped: "not_connected" });
+    const res = await sync(db, cfg.address, cfg.app_password, Math.min(Number(body.limit ?? 5) || 5, 8));
+    await db.from("mail_config").update({ last_sync: new Date().toISOString(), last_error: res.ok ? null : res.error }).eq("id", 1);
+    return res.ok ? ok({ nuevos: res.nuevos, pending: res.pending }) : fail("sync", { detail: res.error });
+  }
+
+  const token = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
+  if (!token) return fail("auth");
+  const asUser = createClient(url, anon, { global: { headers: { Authorization: `Bearer ${token}` } } });
+  const { data: me, error: meErr } = await asUser.auth.getUser();
+  if (meErr || !me.user || !isTeam(me.user)) return fail("forbidden");
 
   try {
     switch (action) {
@@ -88,10 +109,10 @@ Deno.serve(async (req) => {
       case "sync": {
         const cfg = await getConfig();
         if (!cfg) return fail("not_connected");
-        const limit = Math.min(Number(body.limit ?? 60) || 60, 200);
+        const limit = Math.min(Number(body.limit ?? 5) || 5, 8);
         const res = await sync(db, cfg.address, cfg.app_password, limit);
         await db.from("mail_config").update({ last_sync: new Date().toISOString(), last_error: res.ok ? null : res.error }).eq("id", 1);
-        return res.ok ? ok({ nuevos: res.nuevos }) : fail("sync", { detail: res.error });
+        return res.ok ? ok({ nuevos: res.nuevos, pending: res.pending }) : fail("sync", { detail: res.error });
       }
 
       case "send": {
@@ -152,7 +173,38 @@ async function testConnection(address: string, pass: string): Promise<{ ok: true
 
 type DB = ReturnType<typeof createClient>;
 
-async function sync(db: DB, address: string, pass: string, limit: number): Promise<{ ok: true; nuevos: number } | { ok: false; error: string }> {
+// deno-lint-ignore no-explicit-any
+type Meta = { uid: number; size?: number; envelope?: any; bodyStructure?: any; internalDate?: Date };
+
+/** Todos los uids ya guardados de una carpeta (paginando: Supabase devuelve 1000 por consulta). */
+async function storedUids(db: DB, folder: string): Promise<Set<number>> {
+  const have = new Set<number>();
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await db.from("mensajes").select("uid").eq("folder", folder).not("uid", "is", null).range(from, from + 999);
+    if (error || !data) break;
+    for (const r of data as { uid: number }[]) have.add(Number(r.uid));
+    if (data.length < 1000) break;
+  }
+  return have;
+}
+
+async function saveRow(db: DB, row: Record<string, unknown>): Promise<boolean> {
+  // Si ya existe por message_id (p. ej. un enviado desde la app), se enlaza en vez de duplicar
+  if (row.message_id) {
+    const { data: prev } = await db.from("mensajes").select("id").eq("message_id", row.message_id as string).limit(1);
+    if (prev && prev.length) {
+      await db.from("mensajes").update({ uid: row.uid, folder: row.folder }).eq("id", (prev[0] as { id: string }).id);
+      return false;
+    }
+  }
+  const { error } = await db.from("mensajes").insert(row);
+  return !error;
+}
+
+async function sync(db: DB, address: string, pass: string, limit: number): Promise<{ ok: true; nuevos: number; pending: number } | { ok: false; error: string }> {
+  const t0 = Date.now();
+  const timeLeft = () => TIME_BUDGET_MS - (Date.now() - t0);
+
   // Clientes para identificar por dominio
   const { data: clientes } = await db.from("clientes").select("id, email, dominio");
   const byDomain = new Map<string, string>();
@@ -161,63 +213,160 @@ async function sync(db: DB, address: string, pass: string, limit: number): Promi
     if (d) byDomain.set(d, c.id);
   }
 
-  let client: ImapFlow;
+  const client = new ImapFlow({ host: "imap.gmail.com", port: 993, secure: true, auth: { user: address, pass }, logger: false });
   try {
-    client = new ImapFlow({ host: "imap.gmail.com", port: 993, secure: true, auth: { user: address, pass }, logger: false });
-    await client.connect();
+    await withTimeout(client.connect(), STEP_TIMEOUT_MS);
   } catch (e) {
+    try { client.close(); } catch { /* nada */ }
     return { ok: false, error: "IMAP: " + String((e as { message?: string })?.message ?? e).slice(0, 160) };
   }
 
   let nuevos = 0;
+  let pending = 0;
+  let stalled = false;
   try {
-    for (const [mailbox, folder, direction] of [["INBOX", "inbox", "in"], [SENT_FOLDER, "sent", "out"]] as const) {
+    // Carpeta de enviados real (en Gmail en español se llama "[Gmail]/Enviados")
+    let sentPath = SENT_FOLDER;
+    try {
+      const boxes = (await withTimeout(client.list(), STEP_TIMEOUT_MS)) as { path: string; specialUse?: string }[];
+      sentPath = boxes.find((b) => b.specialUse === "\\Sent")?.path ?? SENT_FOLDER;
+    } catch { /* se usa el nombre por defecto */ }
+
+    for (const [mailbox, folder, direction] of [["INBOX", "inbox", "in"], [sentPath, "sent", "out"]] as const) {
+      if (timeLeft() < 15_000) { pending += 1; break; }
       let lock;
       try {
-        lock = await client.getMailboxLock(mailbox);
+        lock = await withTimeout(client.getMailboxLock(mailbox), STEP_TIMEOUT_MS);
       } catch {
         continue; // la carpeta puede no existir
       }
       try {
-        const total = (client.mailbox && typeof client.mailbox === "object" ? (client.mailbox as { exists?: number }).exists : 0) ?? 0;
-        if (!total) continue;
-        const start = Math.max(1, total - limit + 1);
+        const allUids = (await withTimeout(client.search({ all: true }, { uid: true }), STEP_TIMEOUT_MS)) as number[] | false;
+        if (!allUids || allUids.length === 0) continue;
 
-        // Qué uids ya tenemos en esta carpeta
-        const { data: existentes } = await db.from("mensajes").select("uid").eq("folder", folder).not("uid", "is", null);
-        const have = new Set((existentes ?? []).map((r: { uid: number }) => Number(r.uid)));
+        const have = await storedUids(db, folder);
+        const missing = allUids.map(Number).filter((u) => !have.has(u)).sort((a, b) => b - a); // nuevos primero
+        const batch = missing.slice(0, limit);
+        pending += missing.length - batch.length;
+        if (batch.length === 0) continue;
 
-        for await (const msg of client.fetch(`${start}:*`, { uid: true, source: true, internalDate: true })) {
-          const uid = Number(msg.uid);
-          if (have.has(uid)) continue;
-          let parsed;
+        // 1) Datos ligeros del lote (tamaño, cabeceras, estructura)
+        const metas: Meta[] = [];
+        for await (const m of client.fetch(batch.join(","), { uid: true, size: true, envelope: true, bodyStructure: true, internalDate: true }, { uid: true })) {
+          metas.push(m as unknown as Meta);
+        }
+        metas.sort((a, b) => b.uid - a.uid);
+
+        // 2) Contenido, uno a uno, sin pasarse de tiempo
+        let done = 0;
+        let bytes = 0;
+        for (const m of metas) {
+          if (timeLeft() < 12_000) break;
+          // Tope de CPU por llamada: no más de ~2,5 MB de correo analizado
+          if (done > 0 && bytes + (m.size ?? 0) > 2_500_000) break;
+          bytes += Math.min(m.size ?? 0, FULL_MAX_BYTES);
+          let row: Record<string, unknown>;
           try {
-            parsed = await simpleParser(msg.source as Buffer);
-          } catch {
-            continue;
-          }
-          const row = buildRow(parsed, uid, folder, direction, byDomain);
-          // Si ya existe por message_id (p. ej. un enviado desde la app), actualiza en vez de duplicar
-          if (row.message_id) {
-            const { data: prev } = await db.from("mensajes").select("id").eq("message_id", row.message_id).limit(1);
-            if (prev && prev.length) {
-              await db.from("mensajes").update({ uid, folder }).eq("id", (prev[0] as { id: string }).id);
-              continue;
+            if ((m.size ?? 0) <= FULL_MAX_BYTES) {
+              const full = (await withTimeout(client.fetchOne(String(m.uid), { source: true }, { uid: true }), STEP_TIMEOUT_MS)) as { source?: Uint8Array };
+              const parsed = await withTimeout(simpleParser(Buffer.from(full.source ?? new Uint8Array())), STEP_TIMEOUT_MS);
+              row = buildRow(parsed, m.uid, folder, direction, byDomain);
+            } else {
+              row = await withTimeout(buildRowLarge(client, m, folder, direction, byDomain), STEP_TIMEOUT_MS);
+            }
+          } catch (e) {
+            // Si un correo no se puede leer se guarda con sus cabeceras, para no reintentarlo siempre
+            const msg = String((e as { message?: string })?.message ?? e);
+            row = envelopeRow(m, folder, direction, byDomain);
+            if (msg.includes("timeout")) {
+              if (await saveRow(db, row)) nuevos++;
+              done++;
+              stalled = true; // la conexión puede haber quedado colgada: se sigue en la próxima vuelta
+              break;
             }
           }
-          const { error } = await db.from("mensajes").insert(row);
-          if (!error) nuevos++;
+          if (await saveRow(db, row)) nuevos++;
+          done++;
         }
+        pending += metas.length - done;
       } finally {
-        lock.release();
+        try { lock.release(); } catch { /* nada */ }
       }
+      if (stalled) break;
     }
-    await client.logout();
+    try { await withTimeout(client.logout(), 5_000); } catch { try { client.close(); } catch { /* nada */ } }
   } catch (e) {
-    try { await client.logout(); } catch { /* ya cerrado */ }
+    try { client.close(); } catch { /* nada */ }
     return { ok: false, error: String((e as { message?: string })?.message ?? e).slice(0, 200) };
   }
-  return { ok: true, nuevos };
+  if (stalled && pending === 0) pending = 1;
+  return { ok: true, nuevos, pending };
+}
+
+// deno-lint-ignore no-explicit-any
+function addr(list: any): { address: string; name: string | null } {
+  const a = Array.isArray(list) ? list[0] : null;
+  return { address: (a?.address ?? "").toLowerCase(), name: a?.name || null };
+}
+
+/** Fila solo con cabeceras (para correos que no se pueden leer enteros). */
+function envelopeRow(m: Meta, folder: string, direction: string, byDomain: Map<string, string>) {
+  const env = m.envelope ?? {};
+  const from = addr(env.from);
+  const to = addr(env.to);
+  const domain = direction === "in" ? domainOf(from.address) : domainOf(to.address);
+  return {
+    folder, uid: m.uid, direction,
+    message_id: env.messageId ?? null,
+    thread_id: env.inReplyTo || env.messageId || null,
+    in_reply_to: env.inReplyTo ?? null,
+    referencias: null,
+    from_email: from.address || null,
+    from_name: from.name,
+    to_email: to.address || null,
+    cc: null,
+    subject: env.subject ?? null,
+    fecha: new Date(env.date ?? m.internalDate ?? Date.now()).toISOString(),
+    snippet: null,
+    body_html: null,
+    body_text: "(No se pudo descargar el contenido de este correo. Ábrelo en Gmail.)",
+    adjuntos: [],
+    seen: direction === "out",
+    cliente_id: domain ? byDomain.get(domain) ?? null : null,
+  };
+}
+
+/** Correos grandes: solo se baja la parte de texto/HTML, los adjuntos se listan sin descargarlos. */
+async function buildRowLarge(client: ImapFlow, m: Meta, folder: string, direction: string, byDomain: Map<string, string>) {
+  const row = envelopeRow(m, folder, direction, byDomain) as Record<string, unknown>;
+  let htmlPart: string | null = null;
+  let textPart: string | null = null;
+  const adjuntos: { filename: string; contentType: string; size: number }[] = [];
+  // deno-lint-ignore no-explicit-any
+  const walk = (n: any) => {
+    if (!n) return;
+    if (Array.isArray(n.childNodes) && n.childNodes.length) { n.childNodes.forEach(walk); return; }
+    const filename = n.dispositionParameters?.filename || n.parameters?.name;
+    const isAtt = n.disposition === "attachment" || !!filename;
+    if (isAtt) adjuntos.push({ filename: filename ?? "adjunto", contentType: n.type ?? "application/octet-stream", size: n.size ?? 0 });
+    else if (n.type === "text/html" && !htmlPart) htmlPart = n.part ?? "1";
+    else if (n.type === "text/plain" && !textPart) textPart = n.part ?? "1";
+  };
+  walk(m.bodyStructure);
+
+  async function read(part: string): Promise<string> {
+    const { content } = await client.download(String(m.uid), part, { uid: true, maxBytes: 1_500_000 });
+    const chunks: Uint8Array[] = [];
+    for await (const c of content as AsyncIterable<Uint8Array>) chunks.push(c);
+    return Buffer.concat(chunks).toString("utf8");
+  }
+  const html = htmlPart ? await read(htmlPart) : null;
+  const text = textPart ? await read(textPart) : null;
+  row.body_html = html;
+  row.body_text = text ?? (html ? null : row.body_text);
+  row.snippet = (text ?? (html ?? "").replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim().slice(0, 200) || null;
+  row.adjuntos = adjuntos;
+  return row;
 }
 
 // deno-lint-ignore no-explicit-any
@@ -235,7 +384,7 @@ function buildRow(parsed: any, uid: number, folder: string, direction: string, b
   for (const a of (parsed.attachments ?? []) as { filename?: string; contentType?: string; size?: number; cid?: string; related?: boolean; content?: Uint8Array }[]) {
     const inline = a.related && a.cid && html && (a.size ?? 0) < 2_000_000 && a.content;
     if (inline) {
-      const b64 = btoa(String.fromCharCode(...a.content!));
+      const b64 = Buffer.from(a.content!).toString("base64");
       const dataUri = `data:${a.contentType};base64,${b64}`;
       html = html!.split(`cid:${a.cid}`).join(dataUri).split(`cid:<${a.cid}>`).join(dataUri);
     } else {

@@ -1,6 +1,7 @@
 /* ChipsFinder · Acceso interno — calcado de "ChipsFinder Login.dc.html" */
 
 :root {
+  color-scheme: dark;
   --bg: #101010;
   --bg-deep: #0a0a0a;
   --ink: #fff;
@@ -8,13 +9,56 @@
   --ink-3: #a3a3a3;
   --ink-4: #8a8a8a;
   --ink-5: #575757;
-  --line: #ffffff1a;
+  --line: rgba(255, 255, 255, 0.1);
+  --line-2: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.28);
+  --tint: rgba(255, 255, 255, 0.05);
+  --tint-2: rgba(255, 255, 255, 0.09);
+  --field-bg: #000;
+  --on-accent: #fff;
+  --scrim: rgba(0, 0, 0, 0.65);
+  --panel-bg: #0c0c0c;
+  --surface: #101010;
+  --surface-2: #151515;
+  --topbar-bg: rgba(12, 12, 12, 0.9);
+  --ok: #5fd38d;
+  --warn: #f2b84b;
+  --bad: #ff6b6b;
+  --info: #8ea8ff;
   --accent: #f0503c;
   --accent-hover: #ff6450;
   --accent-busy: #b83c2c;
   --f-display: "Geist", sans-serif;
   --f-body: "IBM Plex Sans", sans-serif;
   --f-mono: "IBM Plex Mono", monospace;
+}
+
+/* Modo claro (día) */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f4f4f5;
+  --bg-deep: #e9e9ec;
+  --ink: #18181b;
+  --ink-2: #3f3f46;
+  --ink-3: #5f5f6a;
+  --ink-4: #78787f;
+  --ink-5: #a1a1aa;
+  --line: rgba(0, 0, 0, 0.12);
+  --line-2: rgba(0, 0, 0, 0.08);
+  --line-strong: rgba(0, 0, 0, 0.26);
+  --tint: rgba(0, 0, 0, 0.04);
+  --tint-2: rgba(0, 0, 0, 0.06);
+  --field-bg: #ffffff;
+  --on-accent: #fff;
+  --scrim: rgba(20, 20, 25, 0.45);
+  --panel-bg: #f1f1f3;
+  --surface: #ffffff;
+  --surface-2: #f6f6f8;
+  --topbar-bg: rgba(244, 244, 245, 0.9);
+  --ok: #1f9d57;
+  --warn: #a9790c;
+  --bad: #d64545;
+  --info: #3b5bdb;
 }
 
 html,
@@ -387,7 +431,7 @@ input:focus-visible {
 .input {
   height: 52px;
   padding: 0 16px;
-  background: #000;
+  background: var(--field-bg);
   border: 1px solid var(--line);
   border-radius: 4px;
   color: var(--ink);
@@ -405,9 +449,9 @@ input:focus-visible {
 .input:-webkit-autofill,
 .input:-webkit-autofill:hover,
 .input:-webkit-autofill:focus {
-  -webkit-text-fill-color: #fff;
-  -webkit-box-shadow: 0 0 0 1000px #000 inset;
-  caret-color: #fff;
+  -webkit-text-fill-color: var(--ink);
+  -webkit-box-shadow: 0 0 0 1000px var(--field-bg) inset;
+  caret-color: var(--ink);
 }
 .pw {
   position: relative;
@@ -454,12 +498,12 @@ input:focus-visible {
   width: 20px;
   height: 20px;
   border-radius: 3px;
-  border: 1px solid #ffffff40;
+  border: 1px solid var(--line-strong);
   background: #0000;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: var(--on-accent);
   font-size: 13px;
   line-height: 1;
 }
@@ -475,7 +519,7 @@ input:focus-visible {
   align-items: flex-start;
   padding: 14px 16px;
   border: 1px solid var(--line);
-  background: #000;
+  background: var(--field-bg);
   border-radius: 4px;
 }
 .note__tag {
@@ -505,8 +549,8 @@ input:focus-visible {
 }
 .note--ok {
   padding: 16px;
-  border-color: #ffffff26;
-  background: #ffffff08;
+  border-color: var(--line-strong);
+  background: var(--tint);
 }
 .note--ok .note__tag {
   font-size: 12px;
@@ -534,7 +578,7 @@ input:focus-visible {
   height: 54px;
   background: var(--accent);
   border: 0;
-  color: #fff;
+  color: var(--on-accent);
   font-size: 13px;
   transition: background 0.2s;
 }
@@ -553,13 +597,13 @@ input:focus-visible {
   height: 50px;
   background: #0000;
   border: 1px solid var(--line);
-  color: #fff;
+  color: var(--ink);
   font-size: 13px;
   transition: border-color 0.2s;
 }
 .btn--sso:hover,
 .btn--ghost:hover {
-  border-color: #ffffff4d;
+  border-color: var(--line-strong);
 }
 .btn--ghost {
   height: 48px;
@@ -622,7 +666,7 @@ input:focus-visible {
   align-items: center;
   gap: 14px;
   padding: 14px 16px;
-  background: #000;
+  background: var(--field-bg);
   outline: 1px solid var(--line);
 }
 .check__mark {
