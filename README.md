@@ -94,7 +94,7 @@ Al iniciar sesión se ve "Sesión iniciada · Cargando el panel…" y se entra a
 | Sección | Qué guarda | Tabla |
 | --- | --- | --- |
 | 00 Inicio | Resumen: pedidos abiertos, lotes por revisar, referencias y stock, clientes; últimos pedidos y lotes pendientes | — |
-| 01 Pedidos | **Por cliente**: entras en Pedidos y ves la lista de clientes; al abrir uno ves sus artículos (referencia, unidades, objetivo del cliente, precio que damos) y, bajo cada artículo, los **proveedores** con precio, email, enlace, país, disponibilidad y margen | `pedidos` + `ofertas` |
+| 01 Pedidos | **Por cliente** y en dos niveles: entras en Pedidos → lista de clientes (con su proceso) → abres un cliente → **lista de sus referencias** → abres una referencia → su **ficha** con unidades, objetivo, **recomendador de precio** (coste del proveedor → precio sugerido, venta total, coste total, **tu beneficio** y margen, con aviso de si es buen precio) y los **proveedores** (precio, email, enlace, país, disponibilidad, elegido) | `pedidos` + `ofertas` |
 | 02 Lotes | Material que entra: proveedor, date code, inspección (pendiente / en inspección / aprobado / rechazado) | `lotes` |
 | 03 Referencias | Catálogo: MPN, fabricante, encapsulado, stock, precio, ubicación | `referencias` |
 | 04 Proveedores | Fabricantes, distribuidores y brokers, con valoración | `proveedores` |

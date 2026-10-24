@@ -25,6 +25,7 @@ export type Pedido = {
   mpn: string | null;
   descripcion: string | null;
   unidades: string | null;
+  cantidad: number | null;
   precio_objetivo: number | null;
   precio_cliente: number | null;
   estado: string;
@@ -106,6 +107,7 @@ export type PedidoInput = {
   mpn: string;
   descripcion: string;
   unidades: string;
+  cantidad: number | null;
   precio_objetivo: number | null;
   precio_cliente: number | null;
   estado: string;
@@ -118,6 +120,7 @@ export async function savePedido(input: PedidoInput, id?: string): Promise<Res<{
     mpn: input.mpn.trim() || null,
     descripcion: input.descripcion.trim() || null,
     unidades: input.unidades.trim() || null,
+    cantidad: input.cantidad,
     precio_objetivo: input.precio_objetivo,
     precio_cliente: input.precio_cliente,
     estado: input.estado,
@@ -135,6 +138,12 @@ export async function savePedido(input: PedidoInput, id?: string): Promise<Res<{
 
 export async function deletePedido(id: string): Promise<Res<null>> {
   const { error } = await supabase.from("pedidos").delete().eq("id", id);
+  return error ? fail() : ok(null);
+}
+
+/** Guarda el precio que damos al cliente (desde el recomendador). */
+export async function setPrecioCliente(id: string, precio: number | null, cantidad: number | null): Promise<Res<null>> {
+  const { error } = await supabase.from("pedidos").update({ precio_cliente: precio, cantidad }).eq("id", id);
   return error ? fail() : ok(null);
 }
 

@@ -1603,3 +1603,234 @@ select.input option {
     align-items: baseline;
   }
 }
+
+/* ---------- Detalle de referencia + recomendador ---------- */
+.ref-mpn {
+  display: block;
+  font-family: var(--f-mono);
+  font-size: 13px;
+  color: #fff;
+}
+.ref-desc {
+  display: block;
+  font-size: 12.5px;
+  color: var(--ink-4);
+  margin-top: 2px;
+}
+.item-title {
+  font-family: var(--f-mono);
+  font-size: clamp(24px, 2.6vw, 34px);
+  letter-spacing: -0.01em;
+}
+.item-detail__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: 16px;
+  align-items: start;
+}
+.detail-col {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.offers--card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 16px;
+}
+
+.pricebox {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.pricebox__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.price-inputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.price-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.price-field > span {
+  font-family: var(--f-display);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+.price-field--your {
+  padding-top: 4px;
+}
+.price-field--your .input {
+  border-color: #f0503c66;
+  font-size: 16px;
+  font-family: var(--f-mono);
+}
+
+.reco {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  width: 100%;
+  padding: 12px 14px;
+  background: #f0503c0f;
+  border: 1px solid #f0503c55;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font-family: inherit;
+}
+.reco:hover {
+  background: #f0503c1a;
+}
+.reco__k {
+  font-family: var(--f-display);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.reco__v {
+  font-family: var(--f-mono);
+  font-size: 22px;
+  color: var(--accent);
+  font-weight: 500;
+}
+.reco__v small {
+  font-size: 12px;
+  color: var(--ink-4);
+}
+.reco__use {
+  margin-left: auto;
+  font-family: var(--f-display);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.totals {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.total {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  background: #000;
+}
+.total--profit {
+  background: #5fd38d0d;
+}
+.total__k {
+  font-family: var(--f-display);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-5);
+}
+.total__v {
+  font-family: var(--f-mono);
+  font-size: 17px;
+  color: #fff;
+}
+.total--profit .total__v {
+  color: var(--ok);
+}
+.total__v.is-neg {
+  color: var(--bad);
+}
+
+.verdict {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  line-height: 1.5;
+  border: 1px solid var(--line);
+  color: var(--ink-2);
+}
+.verdict--great {
+  border-color: #5fd38d55;
+  background: #5fd38d12;
+  color: #bff0d2;
+}
+.verdict--tight {
+  border-color: #f2b84b55;
+  background: #f2b84b12;
+  color: #ffe6b0;
+}
+.verdict--loss {
+  border-color: #ff6b6b55;
+  background: #ff6b6b12;
+  color: #ffd2cb;
+}
+.pricebox__foot {
+  display: flex;
+  justify-content: flex-end;
+}
+.factors {
+  font-size: 13px;
+  color: var(--ink-3);
+}
+.factors summary {
+  cursor: pointer;
+  font-family: var(--f-display);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+.factors ul {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+@media (max-width: 920px) {
+  .detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 760px) {
+  .price-inputs,
+  .totals {
+    grid-template-columns: 1fr;
+  }
+}
+
+.verdict--above {
+  border-color: #f2b84b55;
+  background: #f2b84b12;
+  color: #ffe6b0;
+}
