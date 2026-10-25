@@ -12,6 +12,7 @@ import Account from "./Account";
 import Pedidos from "./Pedidos";
 import Proveedores from "./Proveedores";
 import Referencias from "./Referencias";
+import Tareas, { contarTareas } from "./Tareas";
 import Unibox from "./Unibox";
 import ErrorBoundary from "./ErrorBoundary";
 import { listUsers } from "./team";
@@ -33,21 +34,23 @@ const C = {
   unibox: ["Unibox", "Unibox"] as Tr,
   equipo: ["Equipo", "Team"] as Tr,
   account: ["Mi cuenta", "My account"] as Tr,
+  seguimiento: ["Seguimiento", "Follow-up"] as Tr,
+  tareas: ["Situación y tareas", "Status & tasks"] as Tr,
   openAccount: ["Ver mi cuenta", "View my account"] as Tr,
 };
 
-type PanelSection = SectionId | "unibox" | "equipo" | "cuenta";
+type PanelSection = SectionId | "unibox" | "equipo" | "cuenta" | "tareas";
 
-const EXTRA: Record<"unibox" | "equipo" | "cuenta", Tr> = { unibox: C.unibox, equipo: C.equipo, cuenta: C.account };
+const EXTRA: Record<"unibox" | "equipo" | "cuenta" | "tareas", Tr> = { unibox: C.unibox, equipo: C.equipo, cuenta: C.account, tareas: C.tareas };
 
-const RECOGNISED: PanelSection[] = ["inicio", "pedidos", "unibox", "referencias", "proveedores", "clientes", "equipo", "cuenta"];
+const RECOGNISED: PanelSection[] = ["inicio", "pedidos", "unibox", "referencias", "proveedores", "clientes", "equipo", "cuenta", "tareas"];
 
 type Route = { section: PanelSection; id: string | null };
 
 function readRoute(): Route {
   const parts = window.location.pathname.replace(/^\/panel\/?/, "").split("/").filter(Boolean);
   const section = (RECOGNISED as string[]).includes(parts[0] ?? "") ? (parts[0] as PanelSection) : "inicio";
-  const hasId = section !== "inicio" && section !== "cuenta";
+  const hasId = section !== "inicio" && section !== "cuenta" && section !== "tareas";
   return { section, id: hasId ? parts[1] ?? null : null };
 }
 
@@ -57,10 +60,10 @@ function routePath(r: Route) {
 }
 
 function sectionTitle(s: PanelSection): Tr {
-  return s === "unibox" || s === "equipo" || s === "cuenta" ? EXTRA[s] : SECTION_TITLE[s];
+  return s === "unibox" || s === "equipo" || s === "cuenta" || s === "tareas" ? EXTRA[s] : SECTION_TITLE[s];
 }
 
-type Counts = Partial<Record<EntityId, number>> & { equipo?: number; unibox?: number };
+type Counts = Partial<Record<EntityId, number>> & { equipo?: number; unibox?: number; tareas?: number };
 
 export default function Panel({ session, onSignOut }: { session: Session; onSignOut: () => void }) {
   const [lang, setLangState] = useState<Lang>(initialLang);
@@ -122,6 +125,7 @@ export default function Panel({ session, onSignOut }: { session: Session; onSign
     });
     const mail = await supabase.from("mensajes").select("id", { count: "exact", head: true }).eq("seen", false).eq("direction", "in");
     if (!mail.error) next.unibox = mail.count ?? 0;
+    try { next.tareas = await contarTareas(); } catch { /* sin contador */ }
     if (isAdmin) {
       const u = await listUsers();
       if (u.ok) next.equipo = u.users.length;
@@ -194,6 +198,10 @@ export default function Panel({ session, onSignOut }: { session: Session; onSign
           <ul>{navItem("equipo", "05", C.equipo, counts.equipo)}</ul>
         </div>
       )}
+      <div className="nav-group">
+        <span className="nav-group__label">{tr(C.seguimiento, lang)}</span>
+        <ul>{navItem("tareas", "✓", C.tareas, counts.tareas)}</ul>
+      </div>
     </nav>
   );
 
@@ -301,6 +309,13 @@ export default function Panel({ session, onSignOut }: { session: Session; onSign
               isAdmin={isAdmin}
               clienteId={route.id}
               onOpen={(id: string | null) => navigate({ section: "pedidos", id }, true)}
+              onChanged={() => setRefreshKey((k) => k + 1)}
+            />
+          ) : route.section === "tareas" ? (
+            <Tareas
+              lang={lang}
+              goSuppliers={(cid, pid) => navigate({ section: "proveedores", id: "c~" + cid + "~" + pid })}
+              goClient={(cid) => navigate({ section: "pedidos", id: cid })}
               onChanged={() => setRefreshKey((k) => k + 1)}
             />
           ) : route.section === "proveedores" ? (

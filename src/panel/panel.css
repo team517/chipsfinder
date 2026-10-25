@@ -2255,3 +2255,33 @@ a.contact-chip:hover { border-color: var(--line-strong); color: var(--ink); }
 .contact-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .contact-body { font-family: inherit; line-height: 1.5; min-height: 320px; }
 .note--ok .note__tag { color: var(--ok); border-color: var(--ok); }
+
+/* ---------- Situación y tareas ---------- */
+.tasks-card { margin-top: 20px; }
+.task-new { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 14px; }
+.task-new__title { flex: 1 1 260px; }
+.task-new__ped { flex: 0 1 240px; }
+.task-new__due { flex: 0 0 150px; }
+.tasks { list-style: none; margin: 0; padding: 0; }
+.task { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
+.task:first-child { border-top: 0; }
+.task__main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.task__title { color: var(--ink); font-size: 14px; }
+.task__sub { color: var(--ink-4); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.task__due { font-family: var(--f-mono, monospace); color: var(--ink-3); }
+.task__due.is-late { color: var(--bad); }
+.task__check { flex: 0 0 auto; width: 20px; height: 20px; border: 1.5px solid var(--line-strong); border-radius: 4px; background: transparent; color: var(--on-accent); font-size: 12px; line-height: 1; cursor: pointer; padding: 0; }
+.task__check:hover { border-color: var(--accent); }
+.task__check.is-on { background: var(--accent); border-color: var(--accent); }
+.task.is-done .task__title { color: var(--ink-4); text-decoration: line-through; }
+.task__dot { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; margin: 0 6px; background: var(--ink-4); }
+.task__dot--bad { background: var(--bad); }
+.task__dot--warn { background: var(--warn); }
+.task__dot--info { background: var(--info); }
+.task__dot--ok { background: var(--ok); }
+.tasks-done { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
+.sup-counts { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+@media (max-width: 640px) {
+  .task { flex-wrap: wrap; }
+  .task__main { flex-basis: calc(100% - 40px); }
+}
