@@ -47,6 +47,8 @@ const RECOGNISED: PanelSection[] = ["inicio", "pedidos", "unibox", "referencias"
 
 type Route = { section: PanelSection; id: string | null };
 
+const safeDecode = (s: string) => { try { return decodeURIComponent(s); } catch { return s; } };
+
 function readRoute(): Route {
   const parts = window.location.pathname.replace(/^\/panel\/?/, "").split("/").filter(Boolean);
   const section = (RECOGNISED as string[]).includes(parts[0] ?? "") ? (parts[0] as PanelSection) : "inicio";
@@ -294,13 +296,19 @@ export default function Panel({ session, onSignOut }: { session: Session; onSign
         </header>
 
         <main className="content">
-          <ErrorBoundary key={route.section + "/" + (route.id ?? "")} es={lang === "es"}>
+          <ErrorBoundary key={route.section === "unibox" ? "unibox" : route.section + "/" + (route.id ?? "")} es={lang === "es"}>
           {route.section === "inicio" ? (
             <Home lang={lang} name={name} refreshKey={refreshKey} go={(section, id) => navigate({ section, id: id ?? null })} />
           ) : route.section === "cuenta" ? (
             <Account lang={lang} session={session} />
           ) : route.section === "unibox" ? (
-            <Unibox lang={lang} isAdmin={isAdmin} onOpenClient={(id) => navigate({ section: "pedidos", id })} />
+            <Unibox
+              lang={lang}
+              isAdmin={isAdmin}
+              onOpenClient={(id) => navigate({ section: "pedidos", id })}
+              openThread={route.id ? safeDecode(route.id) : null}
+              onThread={(id) => window.history.replaceState(null, "", "/panel/unibox" + (id ? "/" + encodeURIComponent(id) : ""))}
+            />
           ) : route.section === "equipo" ? (
             <TeamPage lang={lang} openId={route.id} onOpen={(id: string | null) => navigate({ section: "equipo", id }, true)} />
           ) : route.section === "pedidos" ? (
@@ -316,11 +324,13 @@ export default function Panel({ session, onSignOut }: { session: Session; onSign
               lang={lang}
               goSuppliers={(cid, pid) => navigate({ section: "proveedores", id: "c~" + cid + "~" + pid })}
               goClient={(cid) => navigate({ section: "pedidos", id: cid })}
+              goThread={(th) => navigate({ section: "unibox", id: encodeURIComponent(th) })}
               onChanged={() => setRefreshKey((k) => k + 1)}
             />
           ) : route.section === "proveedores" ? (
             <Proveedores
               lang={lang}
+              onOpenThread={(th) => navigate({ section: "unibox", id: encodeURIComponent(th) })}
               isAdmin={isAdmin}
               openId={route.id}
               onOpen={(id: string | null) => navigate({ section: "proveedores", id }, true)}

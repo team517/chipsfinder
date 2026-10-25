@@ -5,6 +5,7 @@ import { moneyCur, num, text, tr, type Tr } from "./format";
 import { Drawer, EstadoPill, OfferEditor } from "./sourcing";
 import { ContactBtn, ContactDrawer, type ContactPart } from "./contact";
 import { TaskPanel } from "./Tareas";
+import { findReplyThread } from "./mail-data";
 import type { Oferta } from "./pedidos-data";
 
 const C = {
@@ -83,13 +84,13 @@ type OfertaFull = Oferta & {
  *   dir             → directorio de proveedores
  *   p~<proveedor>   → ficha de un proveedor
  */
-export default function Proveedores({ lang, isAdmin, openId, onOpen, onOpenClient, onChanged }: {
-  lang: Lang; isAdmin: boolean; openId: string | null; onOpen: (id: string | null) => void; onOpenClient: (id: string) => void; onChanged: () => void;
+export default function Proveedores({ lang, isAdmin, openId, onOpen, onOpenClient, onOpenThread, onChanged }: {
+  lang: Lang; isAdmin: boolean; onOpenThread: (threadId: string) => void; openId: string | null; onOpen: (id: string | null) => void; onOpenClient: (id: string) => void; onChanged: () => void;
 }) {
   const parts = (openId ?? "").split("~");
   const openProv = (id: string) => onOpen("p~" + id);
   if (parts[0] === "c" && parts[1] && parts[2])
-    return <RefSuppliers key={openId} lang={lang} pedidoId={parts[2]} onBack={() => onOpen("c~" + parts[1])} onOpenProv={openProv} onChanged={onChanged} />;
+    return <RefSuppliers key={openId} lang={lang} onOpenThread={onOpenThread} pedidoId={parts[2]} onBack={() => onOpen("c~" + parts[1])} onOpenProv={openProv} onChanged={onChanged} />;
   if (parts[0] === "c" && parts[1])
     return <ClientRefs key={openId} lang={lang} clienteId={parts[1]} onBack={() => onOpen(null)} onOpenRef={(pid) => onOpen("c~" + parts[1] + "~" + pid)} onOpenClient={onOpenClient} />;
   if (parts[0] === "dir")
@@ -278,16 +279,22 @@ function waitText(iso: string, lang: Lang) {
   return lang === "es" ? (d === 0 ? "desde hoy" : d === 1 ? "desde hace 1 día" : `desde hace ${d} días`) : d === 0 ? "since today" : d === 1 ? "for 1 day" : `for ${d} days`;
 }
 
-type OfProv = Oferta & { updated_at?: string; prov: { id: string; nombre: string; email: string | null; web: string | null; pais: string | null; telefono: string | null } | null };
+type OfProv = Oferta & { updated_at?: string; respuesta_thread?: string | null; prov: { id: string; nombre: string; email: string | null; web: string | null; pais: string | null; telefono: string | null } | null };
 
-function RefSuppliers({ lang, pedidoId, onBack, onOpenProv, onChanged }: {
-  lang: Lang; pedidoId: string; onBack: () => void; onOpenProv: (id: string) => void; onChanged: () => void;
+function RefSuppliers({ lang, onOpenThread, pedidoId, onBack, onOpenProv, onChanged }: {
+  lang: Lang; onOpenThread: (threadId: string) => void; pedidoId: string; onBack: () => void; onOpenProv: (id: string) => void; onChanged: () => void;
 }) {
   const [ped, setPed] = useState<{ mpn: string | null; descripcion: string | null; unidades: string | null; notas: string | null; cliente: { nombre: string } | null; referencia: { mpn: string; fabricante: string | null } | null } | null>(null);
   const [ofs, setOfs] = useState<OfProv[] | null>(null);
   const [offer, setOffer] = useState<OfProv | "new" | null>(null);
   const [contact, setContact] = useState<OfProv | null>(null);
   const [tick, setTick] = useState(0);
+  const [missing, setMissing] = useState<string | null>(null);
+  async function viewReply(o: OfProv) {
+    setMissing(null);
+    const th = await findReplyThread({ respuesta_thread: o.respuesta_thread, email: o.email, provEmail: o.prov?.email });
+    if (th) onOpenThread(th); else setMissing(o.id);
+  }
 
   const load = useCallback(async () => {
     setTick((t) => t + 1);
@@ -350,6 +357,10 @@ function RefSuppliers({ lang, pedidoId, onBack, onOpenProv, onChanged }: {
                       <td data-label={tr(K.colStatus, lang)}>
                         <EstadoPill estado={o.estado} lang={lang} />
                         {o.estado === "contactado" && o.updated_at && <span className="ref-desc">{waitText(o.updated_at, lang)}</span>}
+                        {(o.estado === "respondido" || o.estado === "oferta") && (
+                          <button type="button" className="linkbtn reply-link" onClick={(e) => { e.stopPropagation(); viewReply(o); }}>↩ {lang === "es" ? "Ver respuesta" : "View reply"}</button>
+                        )}
+                        {missing === o.id && <span className="ref-desc">{lang === "es" ? "No está en el Unibox" : "Not in the Unibox"}</span>}
                       </td>
                       <td className="is-right"><ContactBtn lang={lang} onClick={() => setContact(o)} /></td>
                     </tr>
@@ -360,7 +371,7 @@ function RefSuppliers({ lang, pedidoId, onBack, onOpenProv, onChanged }: {
           </div>
         )}
       </div>
-      <TaskPanel lang={lang} pedidoId={pedidoId} reloadKey={tick} onChanged={onChanged} />
+      <TaskPanel lang={lang} pedidoId={pedidoId} reloadKey={tick} goThread={onOpenThread} onChanged={onChanged} />
       {contact && (
         <ContactDrawer lang={lang} part={{ mpn: ped.referencia?.mpn ?? ped.mpn, fabricante: ped.referencia?.fabricante, descripcion: ped.descripcion, unidades: ped.unidades }}
           target={{ ofertaId: contact.id, estado: contact.estado, proveedor: contact.prov?.nombre ?? contact.proveedor ?? "", email: contact.prov?.email ?? contact.email, pais: contact.prov?.pais ?? contact.pais }}

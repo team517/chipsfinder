@@ -98,7 +98,9 @@ function when(iso: string | null, lang: Lang): string {
 }
 const KB = (n: number) => (n < 1024 ? n + " B" : n < 1048576 ? Math.round(n / 1024) + " KB" : (n / 1048576).toFixed(1) + " MB");
 
-export default function Unibox({ lang, isAdmin, onOpenClient }: { lang: Lang; isAdmin: boolean; onOpenClient: (id: string) => void }) {
+export default function Unibox({ lang, isAdmin, onOpenClient, openThread = null, onThread }: {
+  lang: Lang; isAdmin: boolean; onOpenClient: (id: string) => void; openThread?: string | null; onThread?: (id: string | null) => void;
+}) {
   const [status, setStatus] = useState<{ connected: boolean; address: string | null; last_sync: string | null } | null>(null);
 
   const refresh = useCallback(async () => {
@@ -112,7 +114,7 @@ export default function Unibox({ lang, isAdmin, onOpenClient }: { lang: Lang; is
 
   if (status === null) return <div className="state" style={{ marginTop: 24 }}>{tr(C.loading, lang)}</div>;
   if (!status.connected) return <Connect lang={lang} isAdmin={isAdmin} onConnected={refresh} />;
-  return <Inbox lang={lang} isAdmin={isAdmin} status={status} onStatus={refresh} onOpenClient={onOpenClient} />;
+  return <Inbox lang={lang} isAdmin={isAdmin} status={status} onStatus={refresh} onOpenClient={onOpenClient} openThread={openThread} onThread={onThread} />;
 }
 
 /* ---------- Conectar Gmail ---------- */
@@ -182,11 +184,13 @@ function Connect({ lang, isAdmin, onConnected }: { lang: Lang; isAdmin: boolean;
 
 /* ---------- Bandeja ---------- */
 
-function Inbox({ lang, isAdmin, status, onStatus, onOpenClient }: {
+function Inbox({ lang, isAdmin, status, onStatus, onOpenClient, openThread, onThread }: {
+  openThread?: string | null; onThread?: (id: string | null) => void;
   lang: Lang; isAdmin: boolean; status: { address: string | null; last_sync: string | null }; onStatus: () => void; onOpenClient: (id: string) => void;
 }) {
   const [threads, setThreads] = useState<Thread[] | null>(null);
-  const [sel, setSel] = useState<string | null>(null);
+  const [sel, setSelRaw] = useState<string | null>(openThread ?? null);
+  const setSel = (id: string | null) => { setSelRaw(id); onThread?.(id); };
   const [q, setQ] = useState("");
   const [syncing, setSyncing] = useState(false);
   const [left, setLeft] = useState<number | null>(null);

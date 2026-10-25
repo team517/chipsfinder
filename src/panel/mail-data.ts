@@ -144,3 +144,21 @@ export async function markThreadSeen(threadId: string) {
 
 /** Redacta o traduce un correo con IA (en el servidor). error "no_key" si no hay clave configurada. */
 export const mailAi = (p: Record<string, unknown>) => call<{ subject: string; body: string }>("ai", p);
+
+const GENERIC = ["gmail.com", "googlemail.com", "outlook.com", "hotmail.com", "live.com", "yahoo.com", "icloud.com", "qq.com", "163.com", "126.com", "aol.com", "gmx.com", "gmx.de", "proton.me", "protonmail.com"];
+
+/** Hilo del Unibox con la respuesta de un proveedor: el guardado en la oferta o su último correo recibido. */
+export async function findReplyThread(o: { respuesta_thread?: string | null; email?: string | null; provEmail?: string | null }): Promise<string | null> {
+  if (o.respuesta_thread) return o.respuesta_thread;
+  const email = (o.provEmail || o.email || "").trim().toLowerCase();
+  if (!email) return null;
+  const pick = async (pattern: string) => {
+    const { data } = await supabase.from("mensajes").select("thread_id, message_id").eq("direction", "in").ilike("from_email", pattern).order("fecha", { ascending: false }).limit(1);
+    const m = (data ?? [])[0] as { thread_id: string | null; message_id: string | null } | undefined;
+    return m ? m.thread_id || m.message_id : null;
+  };
+  const exact = await pick(email);
+  if (exact) return exact;
+  const dom = email.split("@")[1];
+  return dom && !GENERIC.includes(dom) ? pick("%@" + dom) : null;
+}
