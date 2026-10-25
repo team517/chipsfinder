@@ -2285,3 +2285,16 @@ a.contact-chip:hover { border-color: var(--line-strong); color: var(--ink); }
   .task { flex-wrap: wrap; }
   .task__main { flex-basis: calc(100% - 40px); }
 }
+/* tareas agrupadas */
+.tgroup { margin-top: 14px; }
+.tgroup__head { display: flex; align-items: center; gap: 8px; font-family: var(--f-display); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); padding: 6px 0; border-bottom: 1px solid var(--line); }
+.tgroup__head .task__dot { margin: 0; }
+.tgroup__n { margin-left: auto; font-family: var(--f-mono, monospace); color: var(--ink-4); }
+.tgroup .task:first-child { border-top: 0; }
+.task__dot--accent { background: var(--accent); }
+.task__dot--muted { background: var(--ink-4); }
+.task__auto { flex: 0 0 20px; text-align: center; font-size: 12px; opacity: 0.7; }
+.task__del { flex: 0 0 auto; color: var(--ink-4); }
+.task__del:hover { color: var(--bad); }
+.task:hover { background: var(--tint); }
+.task { padding-left: 6px; padding-right: 6px; border-radius: 3px; }

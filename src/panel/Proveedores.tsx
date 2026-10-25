@@ -4,6 +4,7 @@ import { supabase } from "../auth";
 import { moneyCur, num, text, tr, type Tr } from "./format";
 import { Drawer, EstadoPill, OfferEditor } from "./sourcing";
 import { ContactBtn, ContactDrawer, type ContactPart } from "./contact";
+import { TaskPanel } from "./Tareas";
 import type { Oferta } from "./pedidos-data";
 
 const C = {
@@ -272,7 +273,12 @@ function ClientRefs({ lang, clienteId, onBack, onOpenRef, onOpenClient }: {
 
 /* ---------- 3. Proveedores de una referencia ---------- */
 
-type OfProv = Oferta & { prov: { id: string; nombre: string; email: string | null; web: string | null; pais: string | null; telefono: string | null } | null };
+function waitText(iso: string, lang: Lang) {
+  const d = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000));
+  return lang === "es" ? (d === 0 ? "desde hoy" : d === 1 ? "desde hace 1 día" : `desde hace ${d} días`) : d === 0 ? "since today" : d === 1 ? "for 1 day" : `for ${d} days`;
+}
+
+type OfProv = Oferta & { updated_at?: string; prov: { id: string; nombre: string; email: string | null; web: string | null; pais: string | null; telefono: string | null } | null };
 
 function RefSuppliers({ lang, pedidoId, onBack, onOpenProv, onChanged }: {
   lang: Lang; pedidoId: string; onBack: () => void; onOpenProv: (id: string) => void; onChanged: () => void;
@@ -281,8 +287,10 @@ function RefSuppliers({ lang, pedidoId, onBack, onOpenProv, onChanged }: {
   const [ofs, setOfs] = useState<OfProv[] | null>(null);
   const [offer, setOffer] = useState<OfProv | "new" | null>(null);
   const [contact, setContact] = useState<OfProv | null>(null);
+  const [tick, setTick] = useState(0);
 
   const load = useCallback(async () => {
+    setTick((t) => t + 1);
     const [p, o] = await Promise.all([
       supabase.from("pedidos").select("mpn, descripcion, unidades, notas, cliente:clientes(nombre), referencia:referencias(mpn, fabricante)").eq("id", pedidoId).single(),
       supabase.from("ofertas").select("*, prov:proveedores(id, nombre, email, web, pais, telefono)").eq("pedido_id", pedidoId).limit(500),
@@ -339,7 +347,10 @@ function RefSuppliers({ lang, pedidoId, onBack, onOpenProv, onChanged }: {
                       </td>
                       <td data-label={tr(K.colPrice, lang)} className="is-right is-mono">{moneyCur(o.precio, o.moneda, lang)}</td>
                       <td data-label={tr(K.colAvail, lang)} className="is-optional">{text(o.disponibilidad)}</td>
-                      <td data-label={tr(K.colStatus, lang)}><EstadoPill estado={o.estado} lang={lang} /></td>
+                      <td data-label={tr(K.colStatus, lang)}>
+                        <EstadoPill estado={o.estado} lang={lang} />
+                        {o.estado === "contactado" && o.updated_at && <span className="ref-desc">{waitText(o.updated_at, lang)}</span>}
+                      </td>
                       <td className="is-right"><ContactBtn lang={lang} onClick={() => setContact(o)} /></td>
                     </tr>
                   );
@@ -349,6 +360,7 @@ function RefSuppliers({ lang, pedidoId, onBack, onOpenProv, onChanged }: {
           </div>
         )}
       </div>
+      <TaskPanel lang={lang} pedidoId={pedidoId} reloadKey={tick} onChanged={onChanged} />
       {contact && (
         <ContactDrawer lang={lang} part={{ mpn: ped.referencia?.mpn ?? ped.mpn, fabricante: ped.referencia?.fabricante, descripcion: ped.descripcion, unidades: ped.unidades }}
           target={{ ofertaId: contact.id, estado: contact.estado, proveedor: contact.prov?.nombre ?? contact.proveedor ?? "", email: contact.prov?.email ?? contact.email, pais: contact.prov?.pais ?? contact.pais }}

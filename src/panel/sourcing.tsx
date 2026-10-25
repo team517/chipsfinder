@@ -9,7 +9,7 @@ import { deleteOferta, saveOferta, type EstadoOferta, type Moneda, type Oferta }
 
 export const ESTADOS_OFERTA: { value: EstadoOferta; label: Tr; tone: string }[] = [
   { value: "por_contactar", label: ["Por contactar", "To contact"], tone: "muted" },
-  { value: "contactado", label: ["Contactado", "Contacted"], tone: "info" },
+  { value: "contactado", label: ["Esperando respuesta", "Awaiting reply"], tone: "info" },
   { value: "respondido", label: ["Respondido", "Replied"], tone: "warn" },
   { value: "oferta", label: ["Con oferta", "Quoted"], tone: "ok" },
   { value: "descartado", label: ["Descartado", "Discarded"], tone: "bad" },

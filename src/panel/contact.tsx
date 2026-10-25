@@ -36,7 +36,7 @@ const C = {
   send: ["Enviar correo", "Send email"] as Tr,
   sending: ["Enviando…", "Sending…"] as Tr,
   cancel: ["Cancelar", "Cancel"] as Tr,
-  sent: ["Enviado. La oferta pasa a «Contactado».", "Sent. The offer is now “Contacted”."] as Tr,
+  sent: ["Enviado. Queda como «Esperando respuesta».", "Sent. Now “Awaiting reply”."] as Tr,
   noKey: ["La IA aún no tiene clave configurada; uso la plantilla de ChipsFinder.", "AI has no key yet; using the ChipsFinder template."] as Tr,
   noKeyTr: ["Sin clave de IA: he rehecho el correo en el otro idioma con la plantilla (tus cambios a mano se pierden).", "No AI key: the email was rebuilt in the other language from the template (manual edits are lost)."] as Tr,
   aiErr: ["La IA no respondió. Inténtalo otra vez.", "AI did not respond. Try again."] as Tr,
@@ -139,7 +139,7 @@ export function ContactDrawer({ lang, target, part, onClose, onSent }: {
     setBusy("send"); setNote(null);
     const r = await mailSend({ to: to.trim(), subject, html: toHtml(body), text: body });
     if (!r.ok) { setBusy(null); return setNote({ tone: "error", text: C.errSend }); }
-    if (target.estado === "por_contactar") await supabase.from("ofertas").update({ estado: "contactado" }).eq("id", target.ofertaId);
+    if (target.estado === "por_contactar" || target.estado === "contactado") await supabase.from("ofertas").update({ estado: "contactado" }).eq("id", target.ofertaId);
     setBusy(null);
     setNote({ tone: "ok", text: C.sent });
     setTimeout(onSent, 900);
