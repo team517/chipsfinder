@@ -506,7 +506,12 @@ function Message({ m, lang, mine, fromAddress, onForward, onDelete }: { m: Mensa
   const quote = light ? "#666" : "#aaa";
   const link = light ? "#2b50c8" : "#8ea8ff";
   const html = m.body_html || (m.body_text ? "<pre style='white-space:pre-wrap;font-family:inherit'>" + m.body_text.replace(/&/g, "&amp;").replace(/</g, "&lt;") + "</pre>" : "<i>(sin contenido)</i>");
-  const doc = `<!doctype html><meta charset="utf-8"><base target="_blank"><style>html,body{margin:0;padding:0;color:${ink};background:transparent;font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;word-wrap:break-word;overflow-wrap:anywhere}a{color:${link}}img{max-width:100%;height:auto}blockquote{border-left:2px solid ${quote};margin:0;padding-left:12px;color:${quote}}*{max-width:100%}</style>${html}`;
+  // En modo oscuro el iframe debe declararse oscuro (si no, el navegador lo pinta blanco)
+  // y se anulan los colores propios del correo para que todo se lea sobre negro.
+  const darkFix = light
+    ? ""
+    : `body *{color:${ink}!important;background-color:transparent!important;border-color:#3a3a3a!important}body a,body a *{color:${link}!important}blockquote,blockquote *{color:${quote}!important}`;
+  const doc = `<!doctype html><meta charset="utf-8"><meta name="color-scheme" content="${light ? "light" : "dark"}"><base target="_blank"><style>:root{color-scheme:${light ? "light" : "dark"}}html,body{margin:0;padding:0;color:${ink};background:transparent;font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;word-wrap:break-word;overflow-wrap:anywhere}a{color:${link}}img{max-width:100%;height:auto}blockquote{border-left:2px solid ${quote};margin:0;padding-left:12px;color:${quote}}*{max-width:100%}${darkFix}</style>${html}`;
 
   // El iframe crece hasta la altura real del correo y se reajusta cuando cargan las imágenes
   function fit() {
