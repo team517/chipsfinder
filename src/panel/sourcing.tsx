@@ -38,6 +38,7 @@ const C = {
   price: ["Precio por unidad", "Unit price"] as Tr,
   currency: ["Moneda", "Currency"] as Tr,
   avail: ["Disponibilidad / stock", "Availability / stock"] as Tr,
+  lead: ["Plazo de entrega", "Lead time"] as Tr,
   chosen: ["Proveedor elegido para este pedido", "Chosen supplier for this order"] as Tr,
   notes: ["Observaciones", "Notes"] as Tr,
   save: ["Guardar", "Save"] as Tr,
@@ -117,6 +118,7 @@ export function OfferEditor({ lang, oferta, pedidoId, referenciaId, proveedorId,
   const [precio, setPrecio] = useState(numToForm(oferta?.precio));
   const [moneda, setMoneda] = useState<Moneda>(oferta?.moneda ?? "EUR");
   const [disp, setDisp] = useState(oferta?.disponibilidad ?? "");
+  const [plazo, setPlazo] = useState(oferta?.plazo ?? "");
   const [elegida, setElegida] = useState(oferta?.elegida ?? false);
   const [notas, setNotas] = useState(oferta?.notas ?? "");
   const [busy, setBusy] = useState(false);
@@ -162,7 +164,7 @@ export function OfferEditor({ lang, oferta, pedidoId, referenciaId, proveedorId,
       referencia_id: ref,
       proveedor_id: provId || null,
       proveedor: snap.nombre, email: snap.email, enlace: snap.web, pais: snap.pais,
-      estado, moneda, precio: p, disponibilidad: disp, elegida: elegida && !!(pedidoId || pedId), notas,
+      estado, moneda, precio: p, disponibilidad: disp, plazo, elegida: elegida && !!(pedidoId || pedId), notas,
     }, oferta?.id);
     setBusy(false);
     if (!r.ok) return setErr("save");
@@ -236,6 +238,10 @@ export function OfferEditor({ lang, oferta, pedidoId, referenciaId, proveedorId,
             <div className="fcell">
               <label className="field__label">{tr(C.avail, lang)}</label>
               <input className="input input--sm" value={disp} onChange={(e) => setDisp(e.target.value)} placeholder="4.810 uds." />
+            </div>
+            <div className="fcell">
+              <label className="field__label">{tr(C.lead, lang)}</label>
+              <input className="input input--sm" value={plazo} onChange={(e) => setPlazo(e.target.value)} placeholder={lang === "es" ? "En stock, 3-5 días · 8 semanas…" : "In stock, 3-5 days · 8 weeks…"} />
             </div>
             <div className="fcell">
               <label className="field__label">{tr(C.price, lang)}</label>

@@ -468,7 +468,7 @@ function ItemDetail({
                         {text(o.proveedor)}
                         {o.pais && <span className="offer__country">{o.pais}</span>}
                       </span>
-                      <span className="offer__avail"><EstadoPill estado={o.estado} lang={lang} />{o.disponibilidad ? " " + o.disponibilidad : ""}</span>
+                      <span className="offer__avail"><EstadoPill estado={o.estado} lang={lang} />{o.disponibilidad ? " " + o.disponibilidad : ""}{o.plazo ? <span className="lead"> · ⏱ {o.plazo}</span> : null}</span>
                     </div>
                     <div className="offer__price"><span className="offer__eur">{moneyCur(o.precio, o.moneda, lang)}</span></div>
                     <div className="offer__actions">
@@ -642,6 +642,7 @@ const T = {
   qty: ["Cantidad", "Quantity"] as Tr,
   cost: ["Te cuesta €/ud.", "Your cost €/unit"] as Tr,
   price: ["Tu precio €/ud.", "Your price €/unit"] as Tr,
+  lead: ["Plazo de entrega", "Lead time"] as Tr,
   sale: ["Venta", "Sale"] as Tr,
   costT: ["Coste", "Cost"] as Tr,
   profit: ["Beneficio", "Profit"] as Tr,
@@ -657,7 +658,7 @@ const T = {
   empty: ["Aún no hay cantidades. Añade una o usa las del pedido.", "No quantities yet. Add one or use the order quantities."] as Tr,
 };
 
-type Row = { cantidad: string; coste: string; precio: string };
+type Row = { cantidad: string; coste: string; precio: string; plazo: string };
 
 const toForm = (v: number | null | undefined) => (v == null ? "" : String(v).replace(".", ","));
 function parseNum(s: string): number | null {
@@ -673,10 +674,11 @@ function allNums(s: string | null | undefined): number[] {
 const recoFor = (qty: number, cost: number) => Math.round(cost * (1 + markupFor(cost * qty)) * 100) / 100;
 
 function PriceTiers({ lang, pedido, cost, onSaved }: { lang: Lang; pedido: Pedido; cost: number | null; onSaved: () => void }) {
+  const defaultLead = (pedido.ofertas.find((o) => o.elegida && o.plazo) ?? pedido.ofertas.find((o) => o.plazo && o.estado !== "descartado"))?.plazo ?? "";
   const initial = (): Row[] => {
     const saved = Array.isArray(pedido.escalas) ? pedido.escalas : [];
-    if (saved.length) return saved.map((e) => ({ cantidad: String(e.cantidad), coste: toForm(e.coste), precio: toForm(e.precio) }));
-    return allNums(pedido.unidades).map((q) => ({ cantidad: String(q), coste: "", precio: "" }));
+    if (saved.length) return saved.map((e) => ({ cantidad: String(e.cantidad), coste: toForm(e.coste), precio: toForm(e.precio), plazo: e.plazo ?? "" }));
+    return allNums(pedido.unidades).map((q) => ({ cantidad: String(q), coste: "", precio: "", plazo: "" }));
   };
   const [rows, setRows] = useState<Row[]>(initial);
   const [dirty, setDirty] = useState(!(pedido.escalas && pedido.escalas.length) && allNums(pedido.unidades).length > 0);
@@ -686,7 +688,7 @@ function PriceTiers({ lang, pedido, cost, onSaved }: { lang: Lang; pedido: Pedid
   const set = (i: number, k: keyof Row, v: string) => { setRows((r) => r.map((x, j) => (j === i ? { ...x, [k]: v } : x))); setDirty(true); setSavedOk(false); };
   const add = () => {
     const last = rows.length ? parseNum(rows[rows.length - 1].cantidad) ?? 0 : 0;
-    setRows((r) => [...r, { cantidad: last ? String(last * 2) : "", coste: "", precio: "" }]);
+    setRows((r) => [...r, { cantidad: last ? String(last * 2) : "", coste: "", precio: "", plazo: "" }]);
     setDirty(true); setSavedOk(false);
   };
   const remove = (i: number) => { setRows((r) => r.filter((_, j) => j !== i)); setDirty(true); setSavedOk(false); };
@@ -699,7 +701,7 @@ function PriceTiers({ lang, pedido, cost, onSaved }: { lang: Lang; pedido: Pedid
     const p = parseNum(r.precio) ?? suggested;
     const ok = q > 0 && c != null && p != null;
     return {
-      q, c, p, suggested, ok,
+      q, c, p, suggested, ok, plazo: r.plazo.trim() || defaultLead || "",
       venta: ok ? p! * q : null,
       coste: ok ? c! * q : null,
       beneficio: ok ? (p! - c!) * q : null,
@@ -711,12 +713,12 @@ function PriceTiers({ lang, pedido, cost, onSaved }: { lang: Lang; pedido: Pedid
     setBusy(true);
     const escalas: Escala[] = calc
       .filter((x) => x.q > 0)
-      .map((x) => ({ cantidad: x.q, coste: x.c ?? null, precio: x.p ?? null }))
+      .map((x, i) => ({ cantidad: x.q, coste: x.c ?? null, precio: x.p ?? null, plazo: rows[i]?.plazo.trim() || null }))
       .sort((a, b) => a.cantidad - b.cantidad);
     const r = await saveEscalas(pedido.id, escalas);
     setBusy(false);
     if (r.ok) {
-      setRows(escalas.map((e) => ({ cantidad: String(e.cantidad), coste: toForm(e.coste), precio: toForm(e.precio) })));
+      setRows(escalas.map((e) => ({ cantidad: String(e.cantidad), coste: toForm(e.coste), precio: toForm(e.precio), plazo: e.plazo ?? "" })));
       setDirty(false); setSavedOk(true); onSaved();
     }
   }
@@ -736,7 +738,7 @@ function PriceTiers({ lang, pedido, cost, onSaved }: { lang: Lang; pedido: Pedid
       ) : (
         <div className="tiers__rows">
           <div className="tier tier--head" aria-hidden="true">
-            <span>{tr(T.qty, lang)}</span><span>{tr(T.cost, lang)}</span><span>{tr(T.price, lang)}</span><span />
+            <span>{tr(T.qty, lang)}</span><span>{tr(T.cost, lang)}</span><span>{tr(T.price, lang)}</span><span>{tr(T.lead, lang)}</span><span />
           </div>
           {rows.map((r, i) => {
             const x = calc[i];
@@ -752,6 +754,9 @@ function PriceTiers({ lang, pedido, cost, onSaved }: { lang: Lang; pedido: Pedid
                 <label className="tier__cell"><span className="tier__k">{tr(T.price, lang)}</span>
                   <input className={"input input--sm" + (loss ? " is-bad" : "")} inputMode="decimal" value={r.precio} onChange={(e) => set(i, "precio", e.target.value)} placeholder={x.suggested != null ? toForm(x.suggested) + " (" + tr(T.suggested, lang) + ")" : "0,00"} />
                 </label>
+                <label className="tier__cell"><span className="tier__k">{tr(T.lead, lang)}</span>
+                  <input className="input input--sm tier__lead" value={r.plazo} onChange={(e) => set(i, "plazo", e.target.value)} placeholder={defaultLead || (lang === "es" ? "p. ej. 2-3 semanas" : "e.g. 2-3 weeks")} />
+                </label>
                 <button type="button" className="tcard__del tier__del" title={tr(T.remove, lang)} aria-label={tr(T.remove, lang)} onClick={() => remove(i)}>
                   <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M5 4.5l.6 8.5h4.8l.6-8.5" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
                 </button>
@@ -764,7 +769,7 @@ function PriceTiers({ lang, pedido, cost, onSaved }: { lang: Lang; pedido: Pedid
       <div className="tiers__actions">
         <button type="button" className="linkbtn" onClick={add}>{tr(T.add, lang)}</button>
         {allNums(pedido.unidades).length > 0 && (
-          <button type="button" className="linkbtn" onClick={() => { setRows(allNums(pedido.unidades).map((q) => ({ cantidad: String(q), coste: "", precio: "" }))); setDirty(true); setSavedOk(false); }}>{tr(T.fromUnits, lang)}</button>
+          <button type="button" className="linkbtn" onClick={() => { setRows(allNums(pedido.unidades).map((q) => ({ cantidad: String(q), coste: "", precio: "", plazo: "" }))); setDirty(true); setSavedOk(false); }}>{tr(T.fromUnits, lang)}</button>
         )}
         <span className="drawer__spacer" />
         <button type="button" className={"btn btn--primary btn--sm" + (busy ? " btn--busy" : "")} onClick={save} disabled={busy || (!dirty && !savedOk)}>
@@ -785,6 +790,7 @@ function PriceTiers({ lang, pedido, cost, onSaved }: { lang: Lang; pedido: Pedid
                 <th className="is-right is-optional">{tr(T.costT, lang)}</th>
                 <th className="is-right">{tr(T.profit, lang)}</th>
                 <th className="is-right">{tr(T.margin, lang)}</th>
+                <th>{tr(T.lead, lang)}</th>
               </tr></thead>
               <tbody>
                 {calc.map((x, i) => x.ok && (
@@ -798,6 +804,7 @@ function PriceTiers({ lang, pedido, cost, onSaved }: { lang: Lang; pedido: Pedid
                     <td data-label={tr(T.margin, lang)} className="is-right is-mono">
                       <span className={"mpill " + ((x.margen ?? 0) < 0 ? "mpill--bad" : (x.margen ?? 0) < 8 ? "mpill--warn" : (x.margen ?? 0) >= 15 ? "mpill--ok" : "mpill--info")}>{(x.margen ?? 0).toFixed(1)}%</span>
                     </td>
+                    <td data-label={tr(T.lead, lang)} className="tiers__lead">{x.plazo ? "⏱ " + x.plazo : "—"}</td>
                   </tr>
                 ))}
               </tbody>

@@ -37,7 +37,7 @@ const C = {
   colClient: ["Cliente", "Client"] as Tr,
   colUnits: ["Unidades", "Units"] as Tr,
   colPrice: ["Precio", "Price"] as Tr,
-  colAvail: ["Disponibilidad", "Availability"] as Tr,
+  colAvail: ["Disponibilidad y plazo", "Availability & lead time"] as Tr,
   colState: ["Estado", "Status"] as Tr,
   colNotes: ["Observaciones", "Notes"] as Tr,
   catalogue: ["Catálogo", "Catalogue"] as Tr,
@@ -130,7 +130,7 @@ const K = {
   colProv: ["Proveedor", "Supplier"] as Tr,
   colContact: ["Contacto", "Contact"] as Tr,
   colPrice: ["Precio", "Price"] as Tr,
-  colAvail: ["Disponibilidad", "Availability"] as Tr,
+  colAvail: ["Disponibilidad y plazo", "Availability & lead time"] as Tr,
   chosen: ["elegido", "chosen"] as Tr,
 };
 
@@ -353,7 +353,7 @@ function RefSuppliers({ lang, onOpenThread, pedidoId, onBack, onOpenProv, onChan
                         {!email && !web && "—"}
                       </td>
                       <td data-label={tr(K.colPrice, lang)} className="is-right is-mono">{moneyCur(o.precio, o.moneda, lang)}</td>
-                      <td data-label={tr(K.colAvail, lang)} className="is-optional">{text(o.disponibilidad)}</td>
+                      <td data-label={tr(K.colAvail, lang)} className="is-optional">{text(o.disponibilidad)}{o.plazo && <span className="ref-desc lead">⏱ {o.plazo}</span>}</td>
                       <td data-label={tr(K.colStatus, lang)}>
                         <EstadoPill estado={o.estado} lang={lang} />
                         {o.estado === "contactado" && o.updated_at && <span className="ref-desc">{waitText(o.updated_at, lang)}</span>}
@@ -549,7 +549,7 @@ function ProvDetail({ lang, isAdmin, id, onBack, onOpenClient, onChanged }: {
                     </td>
                     <td data-label={tr(C.colUnits, lang)} className="is-optional">{text(o.pedido?.unidades)}</td>
                     <td data-label={tr(C.colPrice, lang)} className="is-right is-mono">{moneyCur(o.precio, o.moneda, lang)}</td>
-                    <td data-label={tr(C.colAvail, lang)} className="is-optional">{text(o.disponibilidad)}</td>
+                    <td data-label={tr(C.colAvail, lang)} className="is-optional">{text(o.disponibilidad)}{o.plazo && <span className="ref-desc lead">⏱ {o.plazo}</span>}</td>
                     <td data-label={tr(C.colState, lang)}><EstadoPill estado={o.estado} lang={lang} /></td>
                     <td className="is-right"><ContactBtn lang={lang} onClick={() => setContact(o)} /></td>
                   </tr>

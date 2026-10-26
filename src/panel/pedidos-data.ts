@@ -20,12 +20,13 @@ export type Oferta = {
   pais: string | null;
   precio: number | null;
   disponibilidad: string | null;
+  plazo?: string | null;
   elegida: boolean;
   notas: string | null;
 };
 
 /** Precio por cantidad: lo que nos cuesta y lo que le damos al cliente (por unidad). */
-export type Escala = { cantidad: number; coste: number | null; precio: number | null };
+export type Escala = { cantidad: number; coste: number | null; precio: number | null; plazo?: string | null };
 
 export async function saveEscalas(id: string, escalas: Escala[]): Promise<Res<null>> {
   const { error } = await supabase.from("pedidos").update({ escalas }).eq("id", id);
@@ -174,6 +175,7 @@ export type OfertaInput = {
   pais: string;
   precio: number | null;
   disponibilidad: string;
+  plazo?: string;
   elegida: boolean;
   notas: string;
 };
@@ -202,6 +204,7 @@ export async function saveOferta(input: OfertaInput, id?: string): Promise<Res<{
     pais: input.pais.trim() || null,
     precio: input.precio,
     disponibilidad: input.disponibilidad.trim() || null,
+    plazo: (input.plazo ?? "").trim() || null,
     elegida: input.elegida,
     notas: input.notas.trim() || null,
   };

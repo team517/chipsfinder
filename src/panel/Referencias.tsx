@@ -35,7 +35,7 @@ const C = {
   colProv: ["Proveedor", "Supplier"] as Tr,
   colClient: ["Cliente", "Client"] as Tr,
   colPrice: ["Precio", "Price"] as Tr,
-  colAvail: ["Disponibilidad", "Availability"] as Tr,
+  colAvail: ["Disponibilidad y plazo", "Availability & lead time"] as Tr,
   colState: ["Estado", "Status"] as Tr,
   catalogue: ["Catálogo", "Catalogue"] as Tr,
   chosen: ["elegido", "chosen"] as Tr,
@@ -240,7 +240,7 @@ function RefDetail({ lang, isAdmin, id, onBack, onOpenProv, onOpenClient, onChan
                         ) : <span className="ref-desc">{tr(C.catalogue, lang)}</span>}
                       </td>
                       <td data-label={tr(C.colPrice, lang)} className="is-right is-mono">{moneyCur(o.precio, o.moneda, lang)}</td>
-                      <td data-label={tr(C.colAvail, lang)} className="is-optional">{text(o.disponibilidad)}</td>
+                      <td data-label={tr(C.colAvail, lang)} className="is-optional">{text(o.disponibilidad)}{o.plazo && <span className="ref-desc lead">⏱ {o.plazo}</span>}</td>
                       <td data-label={tr(C.colState, lang)}><EstadoPill estado={o.estado} lang={lang} /></td>
                       <td className="is-right"><ContactBtn lang={lang} onClick={() => setContact(o)} /></td>
                     </tr>
