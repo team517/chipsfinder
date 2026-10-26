@@ -24,6 +24,14 @@ export type Oferta = {
   notas: string | null;
 };
 
+/** Precio por cantidad: lo que nos cuesta y lo que le damos al cliente (por unidad). */
+export type Escala = { cantidad: number; coste: number | null; precio: number | null };
+
+export async function saveEscalas(id: string, escalas: Escala[]): Promise<Res<null>> {
+  const { error } = await supabase.from("pedidos").update({ escalas }).eq("id", id);
+  return error ? fail() : ok(null);
+}
+
 export type Pedido = {
   id: string;
   numero: number;
@@ -34,6 +42,7 @@ export type Pedido = {
   cantidad: number | null;
   precio_objetivo: number | null;
   precio_cliente: number | null;
+  escalas: Escala[] | null;
   estado: string;
   notas: string | null;
   created_at: string;

@@ -15,6 +15,8 @@ import {
   savePedido,
   setElegida,
   setPrecioCliente,
+  saveEscalas,
+  type Escala,
   type Cliente,
   type ClienteResumen,
   type Oferta,
@@ -622,10 +624,187 @@ function PriceBox({ lang, pedido, bestCost, onSaved }: { lang: Lang; pedido: Ped
         </>
       )}
 
+      <PriceTiers lang={lang} pedido={pedido} cost={cost} onSaved={onSaved} />
+
       <details className="factors">
         <summary>{tr(C.factorsT, lang)}</summary>
         <ul>{C.factors.map((f, i) => <li key={i}>{tr(f, lang)}</li>)}</ul>
       </details>
+    </div>
+  );
+}
+
+/* ---------------- Precios por cantidad ---------------- */
+
+const T = {
+  title: ["Precios por cantidad", "Price by quantity"] as Tr,
+  hint: ["Pon varias cantidades con lo que te cuesta a ti y lo que le das al cliente. Si dejas tu precio vacío se usa el recomendado.", "Add several quantities with your cost and your price to the client. Leave your price empty to use the recommended one."] as Tr,
+  qty: ["Cantidad", "Quantity"] as Tr,
+  cost: ["Te cuesta €/ud.", "Your cost €/unit"] as Tr,
+  price: ["Tu precio €/ud.", "Your price €/unit"] as Tr,
+  sale: ["Venta", "Sale"] as Tr,
+  costT: ["Coste", "Cost"] as Tr,
+  profit: ["Beneficio", "Profit"] as Tr,
+  margin: ["Margen", "Margin"] as Tr,
+  add: ["+ Añadir cantidad", "+ Add quantity"] as Tr,
+  fromUnits: ["Usar las cantidades del pedido", "Use the order quantities"] as Tr,
+  save: ["Guardar precios", "Save prices"] as Tr,
+  saved: ["Guardado ✓", "Saved ✓"] as Tr,
+  unsaved: ["Cambios sin guardar", "Unsaved changes"] as Tr,
+  summary: ["Resumen para el cliente", "Summary for the client"] as Tr,
+  remove: ["Quitar", "Remove"] as Tr,
+  suggested: ["sugerido", "suggested"] as Tr,
+  empty: ["Aún no hay cantidades. Añade una o usa las del pedido.", "No quantities yet. Add one or use the order quantities."] as Tr,
+};
+
+type Row = { cantidad: string; coste: string; precio: string };
+
+const toForm = (v: number | null | undefined) => (v == null ? "" : String(v).replace(".", ","));
+function parseNum(s: string): number | null {
+  const v = s.trim().replace(/\s/g, "").replace(/\.(?=\d{3}(\D|$))/g, "").replace(",", ".");
+  const x = Number(v);
+  return v === "" || !Number.isFinite(x) ? null : x;
+}
+/** Todas las cantidades que aparecen en "150 / 300 / 600 uds." */
+function allNums(s: string | null | undefined): number[] {
+  const clean = (s ?? "").replace(/(\d)[.,](?=\d{3}\b)/g, "$1");
+  return [...new Set((clean.match(/\d+/g) ?? []).map(Number).filter((x) => x > 0))];
+}
+const recoFor = (qty: number, cost: number) => Math.round(cost * (1 + markupFor(cost * qty)) * 100) / 100;
+
+function PriceTiers({ lang, pedido, cost, onSaved }: { lang: Lang; pedido: Pedido; cost: number | null; onSaved: () => void }) {
+  const initial = (): Row[] => {
+    const saved = Array.isArray(pedido.escalas) ? pedido.escalas : [];
+    if (saved.length) return saved.map((e) => ({ cantidad: String(e.cantidad), coste: toForm(e.coste), precio: toForm(e.precio) }));
+    return allNums(pedido.unidades).map((q) => ({ cantidad: String(q), coste: "", precio: "" }));
+  };
+  const [rows, setRows] = useState<Row[]>(initial);
+  const [dirty, setDirty] = useState(!(pedido.escalas && pedido.escalas.length) && allNums(pedido.unidades).length > 0);
+  const [busy, setBusy] = useState(false);
+  const [savedOk, setSavedOk] = useState(false);
+
+  const set = (i: number, k: keyof Row, v: string) => { setRows((r) => r.map((x, j) => (j === i ? { ...x, [k]: v } : x))); setDirty(true); setSavedOk(false); };
+  const add = () => {
+    const last = rows.length ? parseNum(rows[rows.length - 1].cantidad) ?? 0 : 0;
+    setRows((r) => [...r, { cantidad: last ? String(last * 2) : "", coste: "", precio: "" }]);
+    setDirty(true); setSavedOk(false);
+  };
+  const remove = (i: number) => { setRows((r) => r.filter((_, j) => j !== i)); setDirty(true); setSavedOk(false); };
+
+  // Cálculo de cada fila: coste vacío → el del proveedor; precio vacío → el recomendado
+  const calc = rows.map((r) => {
+    const q = parseNum(r.cantidad) ?? 0;
+    const c = parseNum(r.coste) ?? cost;
+    const suggested = c != null && c > 0 && q > 0 ? recoFor(q, c) : null;
+    const p = parseNum(r.precio) ?? suggested;
+    const ok = q > 0 && c != null && p != null;
+    return {
+      q, c, p, suggested, ok,
+      venta: ok ? p! * q : null,
+      coste: ok ? c! * q : null,
+      beneficio: ok ? (p! - c!) * q : null,
+      margen: ok && p! > 0 ? ((p! - c!) / p!) * 100 : null,
+    };
+  });
+
+  async function save() {
+    setBusy(true);
+    const escalas: Escala[] = calc
+      .filter((x) => x.q > 0)
+      .map((x) => ({ cantidad: x.q, coste: x.c ?? null, precio: x.p ?? null }))
+      .sort((a, b) => a.cantidad - b.cantidad);
+    const r = await saveEscalas(pedido.id, escalas);
+    setBusy(false);
+    if (r.ok) {
+      setRows(escalas.map((e) => ({ cantidad: String(e.cantidad), coste: toForm(e.coste), precio: toForm(e.precio) })));
+      setDirty(false); setSavedOk(true); onSaved();
+    }
+  }
+
+  const valid = calc.filter((x) => x.ok);
+
+  return (
+    <div className="tiers">
+      <div className="tiers__head">
+        <span className="offers__title">{tr(T.title, lang)}</span>
+        {dirty && <span className="tiers__dirty">● {tr(T.unsaved, lang)}</span>}
+      </div>
+      <p className="tiers__hint">{tr(T.hint, lang)}</p>
+
+      {rows.length === 0 ? (
+        <p className="offers__empty">{tr(T.empty, lang)}</p>
+      ) : (
+        <div className="tiers__rows">
+          <div className="tier tier--head" aria-hidden="true">
+            <span>{tr(T.qty, lang)}</span><span>{tr(T.cost, lang)}</span><span>{tr(T.price, lang)}</span><span />
+          </div>
+          {rows.map((r, i) => {
+            const x = calc[i];
+            const loss = x.ok && x.p! < x.c!;
+            return (
+              <div key={i} className="tier">
+                <label className="tier__cell"><span className="tier__k">{tr(T.qty, lang)}</span>
+                  <span className="tier__qty"><input className="input input--sm" inputMode="numeric" value={r.cantidad} onChange={(e) => set(i, "cantidad", e.target.value)} placeholder="100" /><small>uds.</small></span>
+                </label>
+                <label className="tier__cell"><span className="tier__k">{tr(T.cost, lang)}</span>
+                  <input className="input input--sm" inputMode="decimal" value={r.coste} onChange={(e) => set(i, "coste", e.target.value)} placeholder={cost != null ? toForm(cost) : "0,00"} />
+                </label>
+                <label className="tier__cell"><span className="tier__k">{tr(T.price, lang)}</span>
+                  <input className={"input input--sm" + (loss ? " is-bad" : "")} inputMode="decimal" value={r.precio} onChange={(e) => set(i, "precio", e.target.value)} placeholder={x.suggested != null ? toForm(x.suggested) + " (" + tr(T.suggested, lang) + ")" : "0,00"} />
+                </label>
+                <button type="button" className="tcard__del tier__del" title={tr(T.remove, lang)} aria-label={tr(T.remove, lang)} onClick={() => remove(i)}>
+                  <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M5 4.5l.6 8.5h4.8l.6-8.5" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="tiers__actions">
+        <button type="button" className="linkbtn" onClick={add}>{tr(T.add, lang)}</button>
+        {allNums(pedido.unidades).length > 0 && (
+          <button type="button" className="linkbtn" onClick={() => { setRows(allNums(pedido.unidades).map((q) => ({ cantidad: String(q), coste: "", precio: "" }))); setDirty(true); setSavedOk(false); }}>{tr(T.fromUnits, lang)}</button>
+        )}
+        <span className="drawer__spacer" />
+        <button type="button" className={"btn btn--primary btn--sm" + (busy ? " btn--busy" : "")} onClick={save} disabled={busy || (!dirty && !savedOk)}>
+          {busy && <span className="spinner" aria-hidden="true" />}{tr(savedOk && !dirty ? T.saved : T.save, lang)}
+        </button>
+      </div>
+
+      {valid.length > 0 && (
+        <div className="tiers__sum">
+          <span className="tiers__sumt">{tr(T.summary, lang)}</span>
+          <div className="table-wrap table-wrap--flat">
+            <table className="tbl tbl--tiers">
+              <thead><tr>
+                <th>{tr(T.qty, lang)}</th>
+                <th className="is-right">{tr(T.cost, lang)}</th>
+                <th className="is-right">{tr(T.price, lang)}</th>
+                <th className="is-right is-optional">{tr(T.sale, lang)}</th>
+                <th className="is-right is-optional">{tr(T.costT, lang)}</th>
+                <th className="is-right">{tr(T.profit, lang)}</th>
+                <th className="is-right">{tr(T.margin, lang)}</th>
+              </tr></thead>
+              <tbody>
+                {calc.map((x, i) => x.ok && (
+                  <tr key={i}>
+                    <td data-label={tr(T.qty, lang)} className="is-strong is-mono">{num(x.q, lang)} uds.</td>
+                    <td data-label={tr(T.cost, lang)} className="is-right is-mono">{money(x.c, lang)}</td>
+                    <td data-label={tr(T.price, lang)} className="is-right is-mono tiers__your">{money(x.p, lang)}</td>
+                    <td data-label={tr(T.sale, lang)} className="is-right is-mono is-optional">{money(x.venta, lang)}</td>
+                    <td data-label={tr(T.costT, lang)} className="is-right is-mono is-optional">{money(x.coste, lang)}</td>
+                    <td data-label={tr(T.profit, lang)} className={"is-right is-mono " + ((x.beneficio ?? 0) < 0 ? "is-neg" : "tiers__profit")}>{money(x.beneficio, lang)}</td>
+                    <td data-label={tr(T.margin, lang)} className="is-right is-mono">
+                      <span className={"mpill " + ((x.margen ?? 0) < 0 ? "mpill--bad" : (x.margen ?? 0) < 8 ? "mpill--warn" : (x.margen ?? 0) >= 15 ? "mpill--ok" : "mpill--info")}>{(x.margen ?? 0).toFixed(1)}%</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
