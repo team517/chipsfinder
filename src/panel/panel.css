@@ -2365,33 +2365,63 @@ a.contact-chip:hover { border-color: var(--line-strong); color: var(--ink); }
 .tiers { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
 .tiers__head { display: flex; align-items: center; gap: 10px; }
 .tiers__dirty { margin-left: auto; font-size: 12px; color: var(--warn); }
-.tiers__hint { margin: 6px 0 12px; font-size: 12.5px; color: var(--ink-4); }
-.tiers__rows { display: flex; flex-direction: column; gap: 8px; }
-.tier { display: grid; grid-template-columns: 1fr 1fr 1.25fr 30px; gap: 8px; align-items: center; }
-.tier--head { font-family: var(--f-display); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-4); }
-.tier__cell { display: flex; flex-direction: column; min-width: 0; }
-.tier__k { display: none; }
-.tier__qty { position: relative; display: block; }
-.tier__qty input { padding-right: 40px; width: 100%; }
-.tier__qty small { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: var(--ink-4); font-size: 12px; pointer-events: none; }
-.tier input { width: 100%; font-family: var(--f-mono, monospace); }
+.tiers__ok { margin-left: auto; font-size: 12px; color: var(--ok); }
+.tiers__hint { margin: 6px 0 12px; font-size: 12.5px; line-height: 1.45; color: var(--ink-4); }
+.tiers__rows { display: flex; flex-direction: column; gap: 10px; }
+
+/* Cada cantidad: fila 1 = cantidad · coste · precio; fila 2 = plazo a todo lo ancho */
+.tier {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 30px;
+  grid-template-areas: "idx qty cost price del" "idx lead lead lead del";
+  gap: 10px 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+}
+.tier__idx { grid-area: idx; align-self: start; margin-top: 22px; display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--tint); color: var(--ink-3); font-family: var(--f-mono, monospace); font-size: 11px; }
+.tier__cell { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.tier__cell--qty { grid-area: qty; }
+.tier__cell--cost { grid-area: cost; }
+.tier__cell--price { grid-area: price; }
+.tier__cell--lead { grid-area: lead; }
+.tier__del { grid-area: del; align-self: start; margin-top: 20px; }
+.tier__k { font-family: var(--f-display); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tier__unit { position: relative; display: block; }
+.tier__unit input { width: 100%; padding-right: 38px; font-family: var(--f-mono, monospace); }
+.tier__unit small { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: var(--ink-4); font-size: 12px; pointer-events: none; }
+.tier__cell--lead input { width: 100%; }
 .tier input.is-bad { border-color: var(--bad); }
+.tier__sugg { font-size: 11px; color: var(--ink-4); }
 .tiers__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 12px; }
-.tiers__sum { margin-top: 16px; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
-.tiers__sumt { display: block; padding: 10px 14px; font-family: var(--f-display); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); background: var(--tint); border-bottom: 1px solid var(--line); }
-.tiers__sum .table-wrap--flat { margin: 0; }
-.tbl--tiers td, .tbl--tiers th { white-space: nowrap; }
-.tiers__your { color: var(--accent); font-weight: 600; }
+.tiers .note { margin-top: 10px; }
+
+/* Resumen: una tarjeta por cantidad */
+.tiers__sum { margin-top: 18px; }
+.tiers__sumt { display: block; margin-bottom: 10px; font-family: var(--f-display); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+.tsum { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
+.tsum__card { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); }
+.tsum__top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.tsum__qty { font-family: var(--f-display); font-size: 20px; font-weight: 600; color: var(--ink); }
+.tsum__qty small { font-size: 12px; font-weight: 400; color: var(--ink-4); }
+.tsum__lead { font-size: 12px; color: var(--ink-2); padding: 2px 8px; border-radius: 999px; background: var(--tint); white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.tsum__price { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 5px; background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.tsum__k { font-size: 11px; color: var(--ink-3); }
+.tsum__v { font-family: var(--f-mono, monospace); font-size: 20px; font-weight: 600; color: var(--accent); }
+.tsum__grid { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 0; font-size: 13px; }
+.tsum__grid dt { color: var(--ink-4); }
+.tsum__grid dd { margin: 0; text-align: right; font-family: var(--f-mono, monospace); color: var(--ink-2); }
 .tiers__profit { color: var(--ok); font-weight: 600; }
+.tsum__grid dd.is-neg { color: var(--bad); }
+.tsum__grid dd.tiers__profit { color: var(--ok); font-weight: 600; }
 .mpill { display: inline-block; min-width: 52px; padding: 2px 8px; border-radius: 999px; font-size: 12px; text-align: center; }
 .mpill--ok { color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent); }
 .mpill--info { color: var(--info); background: color-mix(in srgb, var(--info) 14%, transparent); }
 .mpill--warn { color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); }
 .mpill--bad { color: var(--bad); background: color-mix(in srgb, var(--bad) 14%, transparent); }
-@media (max-width: 640px) {
-  .tier { grid-template-columns: 1fr 1fr 30px; }
-  .tier--head { display: none; }
-  .tier__k { display: block; font-size: 11px; color: var(--ink-4); margin-bottom: 3px; }
-  .tier__cell:nth-child(3) { grid-column: 1 / 3; }
-  .tier__del { grid-row: 1; grid-column: 3; }
+
+@media (max-width: 560px) {
+  .tier { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 30px; grid-template-areas: "qty cost del" "price price price" "lead lead lead"; }
+  .tier__idx { display: none; }
 }

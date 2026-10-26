@@ -502,6 +502,8 @@ function ItemDetail({
 
 /* ---------------- Recomendador de precio ---------------- */
 
+const pct = (v: number, lang: Lang) => new Intl.NumberFormat(lang === "es" ? "es-ES" : "en-GB", { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(v) + (lang === "es" ? " %" : "%");
+
 function markupFor(orderCost: number): number {
   return orderCost < 1000 ? 0.35 : orderCost < 5000 ? 0.28 : orderCost < 20000 ? 0.22 : orderCost < 50000 ? 0.18 : 0.15;
 }
@@ -612,7 +614,7 @@ function PriceBox({ lang, pedido, bestCost, onSaved }: { lang: Lang; pedido: Ped
             <div className="total"><span className="total__k">{tr(C.totalSale, lang)}</span><span className="total__v">{money(totals.venta, lang)}</span></div>
             <div className="total"><span className="total__k">{tr(C.totalCost, lang)}</span><span className="total__v">{money(totals.coste, lang)}</span></div>
             <div className="total total--profit"><span className="total__k">{tr(C.profit, lang)}</span><span className="total__v">{money(totals.beneficio, lang)}</span></div>
-            <div className="total"><span className="total__k">{tr(C.marginPct, lang)}</span><span className={"total__v " + (totals.margen < 0 ? "is-neg" : "")}>{totals.margen.toFixed(1)}%</span></div>
+            <div className="total"><span className="total__k">{tr(C.marginPct, lang)}</span><span className={"total__v " + (totals.margen < 0 ? "is-neg" : "")}>{pct(totals.margen, lang)}</span></div>
           </div>
           {verdictText && <p className={"verdict verdict--" + verdict}>{tr(verdictText, lang)}</p>}
           {targetWarn && cost != null && <p className="verdict verdict--tight">{tr(C.targetBelow(money(cost, lang)), lang)}</p>}
@@ -654,6 +656,7 @@ const T = {
   unsaved: ["Cambios sin guardar", "Unsaved changes"] as Tr,
   summary: ["Resumen para el cliente", "Summary for the client"] as Tr,
   remove: ["Quitar", "Remove"] as Tr,
+  saveErr: ["No se pudieron guardar los precios. Inténtalo de nuevo.", "Could not save the prices. Try again."] as Tr,
   suggested: ["sugerido", "suggested"] as Tr,
   empty: ["Aún no hay cantidades. Añade una o usa las del pedido.", "No quantities yet. Add one or use the order quantities."] as Tr,
 };
@@ -673,7 +676,7 @@ function allNums(s: string | null | undefined): number[] {
 }
 const recoFor = (qty: number, cost: number) => Math.round(cost * (1 + markupFor(cost * qty)) * 100) / 100;
 
-function PriceTiers({ lang, pedido, cost, onSaved }: { lang: Lang; pedido: Pedido; cost: number | null; onSaved: () => void }) {
+export function PriceTiers({ lang, pedido, cost, onSaved }: { lang: Lang; pedido: Pedido; cost: number | null; onSaved: () => void }) {
   const defaultLead = (pedido.ofertas.find((o) => o.elegida && o.plazo) ?? pedido.ofertas.find((o) => o.plazo && o.estado !== "descartado"))?.plazo ?? "";
   const initial = (): Row[] => {
     const saved = Array.isArray(pedido.escalas) ? pedido.escalas : [];
@@ -684,6 +687,7 @@ function PriceTiers({ lang, pedido, cost, onSaved }: { lang: Lang; pedido: Pedid
   const [dirty, setDirty] = useState(!(pedido.escalas && pedido.escalas.length) && allNums(pedido.unidades).length > 0);
   const [busy, setBusy] = useState(false);
   const [savedOk, setSavedOk] = useState(false);
+  const [saveErr, setSaveErr] = useState(false);
 
   const set = (i: number, k: keyof Row, v: string) => { setRows((r) => r.map((x, j) => (j === i ? { ...x, [k]: v } : x))); setDirty(true); setSavedOk(false); };
   const add = () => {
@@ -710,26 +714,32 @@ function PriceTiers({ lang, pedido, cost, onSaved }: { lang: Lang; pedido: Pedid
   });
 
   async function save() {
-    setBusy(true);
-    const escalas: Escala[] = calc
-      .filter((x) => x.q > 0)
-      .map((x, i) => ({ cantidad: x.q, coste: x.c ?? null, precio: x.p ?? null, plazo: rows[i]?.plazo.trim() || null }))
+    if (busy) return;
+    setBusy(true); setSaveErr(false);
+    // Se guarda lo escrito; si el precio va vacío se guarda el recomendado de ese momento
+    const escalas: Escala[] = rows
+      .map((r, i) => ({ r, x: calc[i] }))
+      .filter(({ x }) => x.q > 0)
+      .map(({ r, x }) => ({ cantidad: x.q, coste: parseNum(r.coste) ?? x.c ?? null, precio: x.p ?? null, plazo: r.plazo.trim() || null }))
       .sort((a, b) => a.cantidad - b.cantidad);
     const r = await saveEscalas(pedido.id, escalas);
     setBusy(false);
-    if (r.ok) {
-      setRows(escalas.map((e) => ({ cantidad: String(e.cantidad), coste: toForm(e.coste), precio: toForm(e.precio), plazo: e.plazo ?? "" })));
-      setDirty(false); setSavedOk(true); onSaved();
-    }
+    if (!r.ok) { setSaveErr(true); return; }
+    setRows(escalas.map((e) => ({ cantidad: String(e.cantidad), coste: toForm(e.coste), precio: toForm(e.precio), plazo: e.plazo ?? "" })));
+    setDirty(false); setSavedOk(true); onSaved();
   }
 
-  const valid = calc.filter((x) => x.ok);
+  const shown = calc.filter((x) => x.q > 0).sort((a, b) => a.q - b.q);
+  const mClass = (m: number | null) => "mpill " + (m == null ? "" : m < 0 ? "mpill--bad" : m < 8 ? "mpill--warn" : m >= 15 ? "mpill--ok" : "mpill--info");
+  const trash = (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M5 4.5l.6 8.5h4.8l.6-8.5" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+  );
 
   return (
     <div className="tiers">
       <div className="tiers__head">
         <span className="offers__title">{tr(T.title, lang)}</span>
-        {dirty && <span className="tiers__dirty">● {tr(T.unsaved, lang)}</span>}
+        {dirty ? <span className="tiers__dirty">● {tr(T.unsaved, lang)}</span> : savedOk ? <span className="tiers__ok">✓ {tr(T.saved, lang)}</span> : null}
       </div>
       <p className="tiers__hint">{tr(T.hint, lang)}</p>
 
@@ -737,29 +747,26 @@ function PriceTiers({ lang, pedido, cost, onSaved }: { lang: Lang; pedido: Pedid
         <p className="offers__empty">{tr(T.empty, lang)}</p>
       ) : (
         <div className="tiers__rows">
-          <div className="tier tier--head" aria-hidden="true">
-            <span>{tr(T.qty, lang)}</span><span>{tr(T.cost, lang)}</span><span>{tr(T.price, lang)}</span><span>{tr(T.lead, lang)}</span><span />
-          </div>
           {rows.map((r, i) => {
             const x = calc[i];
             const loss = x.ok && x.p! < x.c!;
             return (
               <div key={i} className="tier">
-                <label className="tier__cell"><span className="tier__k">{tr(T.qty, lang)}</span>
-                  <span className="tier__qty"><input className="input input--sm" inputMode="numeric" value={r.cantidad} onChange={(e) => set(i, "cantidad", e.target.value)} placeholder="100" /><small>uds.</small></span>
+                <span className="tier__idx" aria-hidden="true">{i + 1}</span>
+                <label className="tier__cell tier__cell--qty"><span className="tier__k">{tr(T.qty, lang)}</span>
+                  <span className="tier__unit"><input className="input input--sm" inputMode="numeric" value={r.cantidad} onChange={(e) => set(i, "cantidad", e.target.value)} placeholder="100" /><small>uds.</small></span>
                 </label>
-                <label className="tier__cell"><span className="tier__k">{tr(T.cost, lang)}</span>
-                  <input className="input input--sm" inputMode="decimal" value={r.coste} onChange={(e) => set(i, "coste", e.target.value)} placeholder={cost != null ? toForm(cost) : "0,00"} />
+                <label className="tier__cell tier__cell--cost"><span className="tier__k">{tr(T.cost, lang)}</span>
+                  <span className="tier__unit"><input className="input input--sm" inputMode="decimal" value={r.coste} onChange={(e) => set(i, "coste", e.target.value)} placeholder={cost != null ? toForm(cost) : "0,00"} /><small>€</small></span>
                 </label>
-                <label className="tier__cell"><span className="tier__k">{tr(T.price, lang)}</span>
-                  <input className={"input input--sm" + (loss ? " is-bad" : "")} inputMode="decimal" value={r.precio} onChange={(e) => set(i, "precio", e.target.value)} placeholder={x.suggested != null ? toForm(x.suggested) + " (" + tr(T.suggested, lang) + ")" : "0,00"} />
+                <label className="tier__cell tier__cell--price"><span className="tier__k">{tr(T.price, lang)}</span>
+                  <span className="tier__unit"><input className={"input input--sm" + (loss ? " is-bad" : "")} inputMode="decimal" value={r.precio} onChange={(e) => set(i, "precio", e.target.value)} placeholder={x.suggested != null ? toForm(x.suggested) : "0,00"} /><small>€</small></span>
+                  {!r.precio.trim() && x.suggested != null && <span className="tier__sugg">{tr(T.suggested, lang)}</span>}
                 </label>
-                <label className="tier__cell"><span className="tier__k">{tr(T.lead, lang)}</span>
-                  <input className="input input--sm tier__lead" value={r.plazo} onChange={(e) => set(i, "plazo", e.target.value)} placeholder={defaultLead || (lang === "es" ? "p. ej. 2-3 semanas" : "e.g. 2-3 weeks")} />
+                <label className="tier__cell tier__cell--lead"><span className="tier__k">{tr(T.lead, lang)}</span>
+                  <input className="input input--sm" value={r.plazo} onChange={(e) => set(i, "plazo", e.target.value)} placeholder={defaultLead || (lang === "es" ? "p. ej. en stock, 3-5 días · 8 semanas" : "e.g. in stock, 3-5 days · 8 weeks")} />
                 </label>
-                <button type="button" className="tcard__del tier__del" title={tr(T.remove, lang)} aria-label={tr(T.remove, lang)} onClick={() => remove(i)}>
-                  <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M5 4.5l.6 8.5h4.8l.6-8.5" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                </button>
+                <button type="button" className="tcard__del tier__del" title={tr(T.remove, lang)} aria-label={tr(T.remove, lang)} onClick={() => remove(i)}>{trash}</button>
               </div>
             );
           })}
@@ -772,43 +779,35 @@ function PriceTiers({ lang, pedido, cost, onSaved }: { lang: Lang; pedido: Pedid
           <button type="button" className="linkbtn" onClick={() => { setRows(allNums(pedido.unidades).map((q) => ({ cantidad: String(q), coste: "", precio: "", plazo: "" }))); setDirty(true); setSavedOk(false); }}>{tr(T.fromUnits, lang)}</button>
         )}
         <span className="drawer__spacer" />
-        <button type="button" className={"btn btn--primary btn--sm" + (busy ? " btn--busy" : "")} onClick={save} disabled={busy || (!dirty && !savedOk)}>
+        <button type="button" className={"btn btn--primary btn--sm" + (busy ? " btn--busy" : "")} onClick={save} disabled={busy || !dirty}>
           {busy && <span className="spinner" aria-hidden="true" />}{tr(savedOk && !dirty ? T.saved : T.save, lang)}
         </button>
       </div>
+      {saveErr && <div className="note note--error" role="alert"><span className="note__tag">ERR</span><span className="note__text">{tr(T.saveErr, lang)}</span></div>}
 
-      {valid.length > 0 && (
+      {shown.length > 0 && (
         <div className="tiers__sum">
           <span className="tiers__sumt">{tr(T.summary, lang)}</span>
-          <div className="table-wrap table-wrap--flat">
-            <table className="tbl tbl--tiers">
-              <thead><tr>
-                <th>{tr(T.qty, lang)}</th>
-                <th className="is-right">{tr(T.cost, lang)}</th>
-                <th className="is-right">{tr(T.price, lang)}</th>
-                <th className="is-right is-optional">{tr(T.sale, lang)}</th>
-                <th className="is-right is-optional">{tr(T.costT, lang)}</th>
-                <th className="is-right">{tr(T.profit, lang)}</th>
-                <th className="is-right">{tr(T.margin, lang)}</th>
-                <th>{tr(T.lead, lang)}</th>
-              </tr></thead>
-              <tbody>
-                {calc.map((x, i) => x.ok && (
-                  <tr key={i}>
-                    <td data-label={tr(T.qty, lang)} className="is-strong is-mono">{num(x.q, lang)} uds.</td>
-                    <td data-label={tr(T.cost, lang)} className="is-right is-mono">{money(x.c, lang)}</td>
-                    <td data-label={tr(T.price, lang)} className="is-right is-mono tiers__your">{money(x.p, lang)}</td>
-                    <td data-label={tr(T.sale, lang)} className="is-right is-mono is-optional">{money(x.venta, lang)}</td>
-                    <td data-label={tr(T.costT, lang)} className="is-right is-mono is-optional">{money(x.coste, lang)}</td>
-                    <td data-label={tr(T.profit, lang)} className={"is-right is-mono " + ((x.beneficio ?? 0) < 0 ? "is-neg" : "tiers__profit")}>{money(x.beneficio, lang)}</td>
-                    <td data-label={tr(T.margin, lang)} className="is-right is-mono">
-                      <span className={"mpill " + ((x.margen ?? 0) < 0 ? "mpill--bad" : (x.margen ?? 0) < 8 ? "mpill--warn" : (x.margen ?? 0) >= 15 ? "mpill--ok" : "mpill--info")}>{(x.margen ?? 0).toFixed(1)}%</span>
-                    </td>
-                    <td data-label={tr(T.lead, lang)} className="tiers__lead">{x.plazo ? "⏱ " + x.plazo : "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="tsum">
+            {shown.map((x, i) => (
+              <div key={i} className="tsum__card">
+                <div className="tsum__top">
+                  <span className="tsum__qty">{num(x.q, lang)} <small>uds.</small></span>
+                  <span className="tsum__lead">⏱ {x.plazo || "—"}</span>
+                </div>
+                <div className="tsum__price">
+                  <span className="tsum__k">{tr(T.price, lang)}</span>
+                  <span className="tsum__v">{x.p != null ? money(x.p, lang) : "—"}</span>
+                </div>
+                <dl className="tsum__grid">
+                  <dt>{tr(T.cost, lang)}</dt><dd>{x.c != null ? money(x.c, lang) : "—"}</dd>
+                  <dt>{tr(T.sale, lang)}</dt><dd>{x.venta != null ? money(x.venta, lang) : "—"}</dd>
+                  <dt>{tr(T.costT, lang)}</dt><dd>{x.coste != null ? money(x.coste, lang) : "—"}</dd>
+                  <dt>{tr(T.profit, lang)}</dt><dd className={(x.beneficio ?? 0) < 0 ? "is-neg" : "tiers__profit"}>{x.beneficio != null ? money(x.beneficio, lang) : "—"}</dd>
+                  <dt>{tr(T.margin, lang)}</dt><dd>{x.margen != null ? <span className={mClass(x.margen)}>{pct(x.margen, lang)}</span> : "—"}</dd>
+                </dl>
+              </div>
+            ))}
           </div>
         </div>
       )}
