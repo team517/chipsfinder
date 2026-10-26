@@ -2425,3 +2425,27 @@ a.contact-chip:hover { border-color: var(--line-strong); color: var(--ink); }
   .tier { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 30px; grid-template-areas: "qty cost del" "price price price" "lead lead lead"; }
   .tier__idx { display: none; }
 }
+
+/* ---------- Tarjetas de precio editables ---------- */
+.tsum__card { position: relative; }
+.tsum__top { align-items: center; }
+.tsum__actions { display: inline-flex; align-items: center; gap: 2px; margin-left: auto; }
+.tsum__edit:hover { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.tsum__confirm { display: inline-flex; gap: 6px; }
+.tsum__lead { align-self: flex-start; }
+.tsum__lead.is-empty { color: var(--ink-4); }
+button.tsum__price { border: 0; width: 100%; text-align: left; font: inherit; cursor: pointer; transition: background .15s; }
+button.tsum__price:hover { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.tsum__missing { font-family: var(--f-body, inherit); font-size: 14px; font-weight: 500; }
+.tsum__note { margin: 0; padding: 8px 10px; border-radius: 4px; font-size: 12px; line-height: 1.4; color: var(--warn); background: color-mix(in srgb, var(--warn) 10%, transparent); }
+.tsum__card.is-editing { gap: 12px; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.tsum__card.is-editing .tier__cell input { width: 100%; }
+.tsum__live { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 8px 10px; border-radius: 4px; background: var(--tint); font-size: 12.5px; color: var(--ink-3); }
+.tsum__live b { font-family: var(--f-mono, monospace); color: var(--ink); font-weight: 600; }
+.tsum__live b.tiers__profit { color: var(--ok); }
+.tsum__live b.is-neg { color: var(--bad); }
+.tsum__editfoot { display: flex; align-items: center; gap: 8px; }
+.tier__sugg { align-self: flex-start; font-size: 12px; }
+.tiers__draft { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-bottom: 12px; padding: 10px 12px; border: 1px dashed var(--warn); border-radius: 6px; font-size: 13px; color: var(--ink-2); }
+.tiers__draft span { flex: 1 1 220px; }
+.tsum { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }

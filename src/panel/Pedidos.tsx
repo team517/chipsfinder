@@ -640,25 +640,38 @@ function PriceBox({ lang, pedido, bestCost, onSaved }: { lang: Lang; pedido: Ped
 
 const T = {
   title: ["Precios por cantidad", "Price by quantity"] as Tr,
-  hint: ["Pon varias cantidades con lo que te cuesta a ti y lo que le das al cliente. Si dejas tu precio vacío se usa el recomendado.", "Add several quantities with your cost and your price to the client. Leave your price empty to use the recommended one."] as Tr,
+  hint: ["Una tarjeta por cantidad con lo que te cuesta a ti, lo que le das al cliente y el plazo. Pulsa Editar para cambiarla.", "One card per quantity with your cost, your price to the client and the lead time. Click Edit to change it."] as Tr,
   qty: ["Cantidad", "Quantity"] as Tr,
   cost: ["Te cuesta €/ud.", "Your cost €/unit"] as Tr,
   price: ["Tu precio €/ud.", "Your price €/unit"] as Tr,
   lead: ["Plazo de entrega", "Lead time"] as Tr,
-  sale: ["Venta", "Sale"] as Tr,
-  costT: ["Coste", "Cost"] as Tr,
+  sale: ["Venta total", "Total sale"] as Tr,
+  costT: ["Coste total", "Total cost"] as Tr,
   profit: ["Beneficio", "Profit"] as Tr,
   margin: ["Margen", "Margin"] as Tr,
   add: ["+ Añadir cantidad", "+ Add quantity"] as Tr,
   fromUnits: ["Usar las cantidades del pedido", "Use the order quantities"] as Tr,
-  save: ["Guardar precios", "Save prices"] as Tr,
-  saved: ["Guardado ✓", "Saved ✓"] as Tr,
-  unsaved: ["Cambios sin guardar", "Unsaved changes"] as Tr,
-  summary: ["Resumen para el cliente", "Summary for the client"] as Tr,
+  save: ["Guardar", "Save"] as Tr,
+  saving: ["Guardando…", "Saving…"] as Tr,
+  saved: ["Guardado", "Saved"] as Tr,
+  edit: ["Editar", "Edit"] as Tr,
+  done: ["Guardar", "Save"] as Tr,
+  cancel: ["Cancelar", "Cancel"] as Tr,
   remove: ["Quitar", "Remove"] as Tr,
+  removeQ: ["¿Quitar esta cantidad?", "Remove this quantity?"] as Tr,
+  yes: ["Sí, quitar", "Yes, remove"] as Tr,
+  draft: ["Estas cantidades vienen del pedido y aún no están guardadas.", "These quantities come from the order and are not saved yet."] as Tr,
+  saveAll: ["Guardarlas", "Save them"] as Tr,
   saveErr: ["No se pudieron guardar los precios. Inténtalo de nuevo.", "Could not save the prices. Try again."] as Tr,
-  suggested: ["sugerido", "suggested"] as Tr,
+  suggested: ["recomendado", "recommended"] as Tr,
+  useSugg: ["Usar recomendado", "Use recommended"] as Tr,
+  noCost: ["Falta lo que te cuesta. Escríbelo para ver el beneficio y el margen.", "Your cost is missing. Add it to see profit and margin."] as Tr,
+  noPrice: ["Falta tu precio para el cliente.", "Your price to the client is missing."] as Tr,
+  addCost: ["Poner coste", "Add cost"] as Tr,
+  addPrice: ["Poner precio", "Add price"] as Tr,
+  noLead: ["Sin plazo", "No lead time"] as Tr,
   empty: ["Aún no hay cantidades. Añade una o usa las del pedido.", "No quantities yet. Add one or use the order quantities."] as Tr,
+  units: ["uds.", "pcs"] as Tr,
 };
 
 type Row = { cantidad: string; coste: string; precio: string; plazo: string };
@@ -675,98 +688,176 @@ function allNums(s: string | null | undefined): number[] {
   return [...new Set((clean.match(/\d+/g) ?? []).map(Number).filter((x) => x > 0))];
 }
 const recoFor = (qty: number, cost: number) => Math.round(cost * (1 + markupFor(cost * qty)) * 100) / 100;
+const emptyRow = (q = ""): Row => ({ cantidad: q, coste: "", precio: "", plazo: "" });
 
 export function PriceTiers({ lang, pedido, cost, onSaved }: { lang: Lang; pedido: Pedido; cost: number | null; onSaved: () => void }) {
   const defaultLead = (pedido.ofertas.find((o) => o.elegida && o.plazo) ?? pedido.ofertas.find((o) => o.plazo && o.estado !== "descartado"))?.plazo ?? "";
-  const initial = (): Row[] => {
-    const saved = Array.isArray(pedido.escalas) ? pedido.escalas : [];
-    if (saved.length) return saved.map((e) => ({ cantidad: String(e.cantidad), coste: toForm(e.coste), precio: toForm(e.precio), plazo: e.plazo ?? "" }));
-    return allNums(pedido.unidades).map((q) => ({ cantidad: String(q), coste: "", precio: "", plazo: "" }));
-  };
-  const [rows, setRows] = useState<Row[]>(initial);
-  const [dirty, setDirty] = useState(!(pedido.escalas && pedido.escalas.length) && allNums(pedido.unidades).length > 0);
+  const savedList = Array.isArray(pedido.escalas) ? pedido.escalas : [];
+  const fromSaved = (list: Escala[]): Row[] => list.map((e) => ({ cantidad: String(e.cantidad), coste: toForm(e.coste), precio: toForm(e.precio), plazo: e.plazo ?? "" }));
+
+  const [rows, setRows] = useState<Row[]>(() => (savedList.length ? fromSaved(savedList) : allNums(pedido.unidades).map((q) => emptyRow(String(q)))));
+  const [draft, setDraft] = useState(!savedList.length && allNums(pedido.unidades).length > 0);
+  const [editing, setEditing] = useState<number | null>(null);
+  const [form, setForm] = useState<Row>(emptyRow());
+  const [askDel, setAskDel] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
-  const [savedOk, setSavedOk] = useState(false);
-  const [saveErr, setSaveErr] = useState(false);
+  const [err, setErr] = useState(false);
+  const [okFlash, setOkFlash] = useState(false);
 
-  const set = (i: number, k: keyof Row, v: string) => { setRows((r) => r.map((x, j) => (j === i ? { ...x, [k]: v } : x))); setDirty(true); setSavedOk(false); };
-  const add = () => {
-    const last = rows.length ? parseNum(rows[rows.length - 1].cantidad) ?? 0 : 0;
-    setRows((r) => [...r, { cantidad: last ? String(last * 2) : "", coste: "", precio: "", plazo: "" }]);
-    setDirty(true); setSavedOk(false);
-  };
-  const remove = (i: number) => { setRows((r) => r.filter((_, j) => j !== i)); setDirty(true); setSavedOk(false); };
-
-  // Cálculo de cada fila: coste vacío → el del proveedor; precio vacío → el recomendado
-  const calc = rows.map((r) => {
+  // Cálculo: coste vacío → el del proveedor; precio vacío → el recomendado (si hay coste)
+  const calcRow = (r: Row) => {
     const q = parseNum(r.cantidad) ?? 0;
     const c = parseNum(r.coste) ?? cost;
     const suggested = c != null && c > 0 && q > 0 ? recoFor(q, c) : null;
-    const p = parseNum(r.precio) ?? suggested;
-    const ok = q > 0 && c != null && p != null;
+    const own = parseNum(r.precio);
+    const p = own ?? suggested;
     return {
-      q, c, p, suggested, ok, plazo: r.plazo.trim() || defaultLead || "",
-      venta: ok ? p! * q : null,
-      coste: ok ? c! * q : null,
-      beneficio: ok ? (p! - c!) * q : null,
-      margen: ok && p! > 0 ? ((p! - c!) / p!) * 100 : null,
+      q, c, p, suggested, isSugg: own == null && suggested != null,
+      plazo: r.plazo.trim() || defaultLead || "",
+      venta: p != null && q > 0 ? p * q : null,
+      coste: c != null && q > 0 ? c * q : null,
+      beneficio: p != null && c != null && q > 0 ? (p - c) * q : null,
+      margen: p != null && c != null && p > 0 ? ((p - c) / p) * 100 : null,
     };
-  });
+  };
 
-  async function save() {
-    if (busy) return;
-    setBusy(true); setSaveErr(false);
-    // Se guarda lo escrito; si el precio va vacío se guarda el recomendado de ese momento
-    const escalas: Escala[] = rows
-      .map((r, i) => ({ r, x: calc[i] }))
+  async function persist(next: Row[]) {
+    setBusy(true); setErr(false);
+    const escalas: Escala[] = next
+      .map((r) => ({ r, x: calcRow(r) }))
       .filter(({ x }) => x.q > 0)
-      .map(({ r, x }) => ({ cantidad: x.q, coste: parseNum(r.coste) ?? x.c ?? null, precio: x.p ?? null, plazo: r.plazo.trim() || null }))
+      .map(({ r, x }) => ({ cantidad: x.q, coste: parseNum(r.coste), precio: parseNum(r.precio) ?? x.p ?? null, plazo: r.plazo.trim() || null }))
       .sort((a, b) => a.cantidad - b.cantidad);
-    const r = await saveEscalas(pedido.id, escalas);
+    const res = await saveEscalas(pedido.id, escalas);
     setBusy(false);
-    if (!r.ok) { setSaveErr(true); return; }
-    setRows(escalas.map((e) => ({ cantidad: String(e.cantidad), coste: toForm(e.coste), precio: toForm(e.precio), plazo: e.plazo ?? "" })));
-    setDirty(false); setSavedOk(true); onSaved();
+    if (!res.ok) { setErr(true); return false; }
+    setRows(fromSaved(escalas));
+    setDraft(false);
+    setOkFlash(true);
+    setTimeout(() => setOkFlash(false), 1800);
+    onSaved();
+    return true;
   }
 
-  const shown = calc.filter((x) => x.q > 0).sort((a, b) => a.q - b.q);
-  const mClass = (m: number | null) => "mpill " + (m == null ? "" : m < 0 ? "mpill--bad" : m < 8 ? "mpill--warn" : m >= 15 ? "mpill--ok" : "mpill--info");
-  const trash = (
-    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M5 4.5l.6 8.5h4.8l.6-8.5" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
-  );
+  const openEdit = (i: number) => { setEditing(i); setForm({ ...rows[i] }); setAskDel(null); setErr(false); };
+  const addCard = () => {
+    const last = rows.length ? parseNum(rows[rows.length - 1].cantidad) ?? 0 : 0;
+    const next = [...rows, emptyRow(last ? String(last * 2) : "")];
+    setRows(next);
+    setEditing(next.length - 1);
+    setForm(next[next.length - 1]);
+  };
+  async function saveCard() {
+    if (editing == null) return;
+    const next = rows.map((r, j) => (j === editing ? form : r));
+    if (await persist(next)) setEditing(null);
+  }
+  function cancelCard() {
+    if (editing == null) return;
+    // Una tarjeta nueva sin cantidad se descarta
+    if (!parseNum(rows[editing].cantidad) && !parseNum(form.cantidad)) setRows((r) => r.filter((_, j) => j !== editing));
+    setEditing(null);
+  }
+  async function removeCard(i: number) {
+    const next = rows.filter((_, j) => j !== i);
+    setAskDel(null);
+    if (editing === i) setEditing(null);
+    await persist(next);
+  }
+
+  const order = rows.map((r, i) => ({ i, q: parseNum(r.cantidad) ?? Number.MAX_SAFE_INTEGER })).sort((a, b) => a.q - b.q).map((x) => x.i);
+  const mClass = (m: number) => "mpill " + (m < 0 ? "mpill--bad" : m < 8 ? "mpill--warn" : m >= 15 ? "mpill--ok" : "mpill--info");
+  const units = tr(T.units, lang);
+  const trash = <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M5 4.5l.6 8.5h4.8l.6-8.5" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+  const pencil = <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M10.5 2.5l3 3L6 13H3v-3z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg>;
+  const fx = editing != null ? calcRow(form) : null;
 
   return (
     <div className="tiers">
       <div className="tiers__head">
         <span className="offers__title">{tr(T.title, lang)}</span>
-        {dirty ? <span className="tiers__dirty">● {tr(T.unsaved, lang)}</span> : savedOk ? <span className="tiers__ok">✓ {tr(T.saved, lang)}</span> : null}
+        {busy ? <span className="tiers__ok">{tr(T.saving, lang)}</span> : okFlash ? <span className="tiers__ok">✓ {tr(T.saved, lang)}</span> : null}
       </div>
       <p className="tiers__hint">{tr(T.hint, lang)}</p>
+
+      {draft && rows.length > 0 && (
+        <div className="tiers__draft">
+          <span>{tr(T.draft, lang)}</span>
+          <button type="button" className="btn btn--primary btn--sm" onClick={() => persist(rows)} disabled={busy}>{tr(T.saveAll, lang)}</button>
+        </div>
+      )}
+      {err && <div className="note note--error" role="alert"><span className="note__tag">ERR</span><span className="note__text">{tr(T.saveErr, lang)}</span></div>}
 
       {rows.length === 0 ? (
         <p className="offers__empty">{tr(T.empty, lang)}</p>
       ) : (
-        <div className="tiers__rows">
-          {rows.map((r, i) => {
-            const x = calc[i];
-            const loss = x.ok && x.p! < x.c!;
+        <div className="tsum">
+          {order.map((i) => {
+            const r = rows[i];
+            if (editing === i && fx) {
+              return (
+                <div key={i} className="tsum__card is-editing">
+                  <label className="tier__cell"><span className="tier__k">{tr(T.qty, lang)}</span>
+                    <span className="tier__unit"><input className="input input--sm" inputMode="numeric" autoFocus value={form.cantidad} onChange={(e) => setForm({ ...form, cantidad: e.target.value })} placeholder="1000" /><small>{units}</small></span>
+                  </label>
+                  <label className="tier__cell"><span className="tier__k">{tr(T.cost, lang)}</span>
+                    <span className="tier__unit"><input className="input input--sm" inputMode="decimal" value={form.coste} onChange={(e) => setForm({ ...form, coste: e.target.value })} placeholder={cost != null ? toForm(cost) : "0,00"} /><small>€</small></span>
+                  </label>
+                  <label className="tier__cell"><span className="tier__k">{tr(T.price, lang)}</span>
+                    <span className="tier__unit"><input className={"input input--sm" + (fx.p != null && fx.c != null && fx.p < fx.c ? " is-bad" : "")} inputMode="decimal" value={form.precio} onChange={(e) => setForm({ ...form, precio: e.target.value })} placeholder={fx.suggested != null ? toForm(fx.suggested) : "0,00"} /><small>€</small></span>
+                    {fx.suggested != null && !form.precio.trim() && (
+                      <button type="button" className="linkbtn tier__sugg" onClick={() => setForm({ ...form, precio: toForm(fx.suggested) })}>{tr(T.useSugg, lang)}: {money(fx.suggested, lang)}</button>
+                    )}
+                  </label>
+                  <label className="tier__cell"><span className="tier__k">{tr(T.lead, lang)}</span>
+                    <input className="input input--sm" value={form.plazo} onChange={(e) => setForm({ ...form, plazo: e.target.value })} placeholder={defaultLead || (lang === "es" ? "En stock, 3-5 días · 8 semanas" : "In stock, 3-5 days · 8 weeks")} />
+                  </label>
+                  <div className="tsum__live">
+                    <span>{tr(T.sale, lang)} <b>{fx.venta != null ? money(fx.venta, lang) : "—"}</b></span>
+                    <span>{tr(T.profit, lang)} <b className={(fx.beneficio ?? 0) < 0 ? "is-neg" : "tiers__profit"}>{fx.beneficio != null ? money(fx.beneficio, lang) : "—"}</b></span>
+                    {fx.margen != null && <span className={mClass(fx.margen)}>{pct(fx.margen, lang)}</span>}
+                  </div>
+                  <div className="tsum__editfoot">
+                    <button type="button" className="tcard__del" title={tr(T.remove, lang)} aria-label={tr(T.remove, lang)} onClick={() => removeCard(i)}>{trash}</button>
+                    <span className="drawer__spacer" />
+                    <button type="button" className="btn btn--ghost btn--sm" onClick={cancelCard}>{tr(T.cancel, lang)}</button>
+                    <button type="button" className={"btn btn--primary btn--sm" + (busy ? " btn--busy" : "")} onClick={saveCard} disabled={busy || !parseNum(form.cantidad)}>
+                      {busy && <span className="spinner" aria-hidden="true" />}{tr(T.done, lang)}
+                    </button>
+                  </div>
+                </div>
+              );
+            }
+            const x = calcRow(r);
             return (
-              <div key={i} className="tier">
-                <span className="tier__idx" aria-hidden="true">{i + 1}</span>
-                <label className="tier__cell tier__cell--qty"><span className="tier__k">{tr(T.qty, lang)}</span>
-                  <span className="tier__unit"><input className="input input--sm" inputMode="numeric" value={r.cantidad} onChange={(e) => set(i, "cantidad", e.target.value)} placeholder="100" /><small>uds.</small></span>
-                </label>
-                <label className="tier__cell tier__cell--cost"><span className="tier__k">{tr(T.cost, lang)}</span>
-                  <span className="tier__unit"><input className="input input--sm" inputMode="decimal" value={r.coste} onChange={(e) => set(i, "coste", e.target.value)} placeholder={cost != null ? toForm(cost) : "0,00"} /><small>€</small></span>
-                </label>
-                <label className="tier__cell tier__cell--price"><span className="tier__k">{tr(T.price, lang)}</span>
-                  <span className="tier__unit"><input className={"input input--sm" + (loss ? " is-bad" : "")} inputMode="decimal" value={r.precio} onChange={(e) => set(i, "precio", e.target.value)} placeholder={x.suggested != null ? toForm(x.suggested) : "0,00"} /><small>€</small></span>
-                  {!r.precio.trim() && x.suggested != null && <span className="tier__sugg">{tr(T.suggested, lang)}</span>}
-                </label>
-                <label className="tier__cell tier__cell--lead"><span className="tier__k">{tr(T.lead, lang)}</span>
-                  <input className="input input--sm" value={r.plazo} onChange={(e) => set(i, "plazo", e.target.value)} placeholder={defaultLead || (lang === "es" ? "p. ej. en stock, 3-5 días · 8 semanas" : "e.g. in stock, 3-5 days · 8 weeks")} />
-                </label>
-                <button type="button" className="tcard__del tier__del" title={tr(T.remove, lang)} aria-label={tr(T.remove, lang)} onClick={() => remove(i)}>{trash}</button>
+              <div key={i} className="tsum__card">
+                <div className="tsum__top">
+                  <span className="tsum__qty">{x.q ? num(x.q, lang) : "—"} <small>{units}</small></span>
+                  <span className="tsum__actions">
+                    <button type="button" className="tcard__del tsum__edit" title={tr(T.edit, lang)} aria-label={tr(T.edit, lang)} onClick={() => openEdit(i)}>{pencil}</button>
+                    {askDel === i ? (
+                      <span className="tsum__confirm">
+                        <button type="button" className="btn btn--danger btn--sm" onClick={() => removeCard(i)}>{tr(T.yes, lang)}</button>
+                        <button type="button" className="btn btn--ghost btn--sm" onClick={() => setAskDel(null)}>{tr(T.cancel, lang)}</button>
+                      </span>
+                    ) : (
+                      <button type="button" className="tcard__del" title={tr(T.remove, lang)} aria-label={tr(T.remove, lang)} onClick={() => setAskDel(i)}>{trash}</button>
+                    )}
+                  </span>
+                </div>
+                <span className={"tsum__lead" + (x.plazo ? "" : " is-empty")}>⏱ {x.plazo || tr(T.noLead, lang)}</span>
+                <button type="button" className="tsum__price" onClick={() => openEdit(i)}>
+                  <span className="tsum__k">{tr(T.price, lang)}{x.isSugg ? " · " + tr(T.suggested, lang) : ""}</span>
+                  <span className="tsum__v">{x.p != null ? money(x.p, lang) : <span className="tsum__missing">+ {tr(T.addPrice, lang)}</span>}</span>
+                </button>
+                <dl className="tsum__grid">
+                  <dt>{tr(T.cost, lang)}</dt><dd>{x.c != null ? money(x.c, lang) : <button type="button" className="linkbtn" onClick={() => openEdit(i)}>+ {tr(T.addCost, lang)}</button>}</dd>
+                  <dt>{tr(T.sale, lang)}</dt><dd>{x.venta != null ? money(x.venta, lang) : "—"}</dd>
+                  <dt>{tr(T.costT, lang)}</dt><dd>{x.coste != null ? money(x.coste, lang) : "—"}</dd>
+                  <dt>{tr(T.profit, lang)}</dt><dd className={x.beneficio == null ? "" : x.beneficio < 0 ? "is-neg" : "tiers__profit"}>{x.beneficio != null ? money(x.beneficio, lang) : "—"}</dd>
+                  <dt>{tr(T.margin, lang)}</dt><dd>{x.margen != null ? <span className={mClass(x.margen)}>{pct(x.margen, lang)}</span> : "—"}</dd>
+                </dl>
+                {x.c == null ? <p className="tsum__note">{tr(T.noCost, lang)}</p> : x.p == null ? <p className="tsum__note">{tr(T.noPrice, lang)}</p> : null}
               </div>
             );
           })}
@@ -774,43 +865,11 @@ export function PriceTiers({ lang, pedido, cost, onSaved }: { lang: Lang; pedido
       )}
 
       <div className="tiers__actions">
-        <button type="button" className="linkbtn" onClick={add}>{tr(T.add, lang)}</button>
-        {allNums(pedido.unidades).length > 0 && (
-          <button type="button" className="linkbtn" onClick={() => { setRows(allNums(pedido.unidades).map((q) => ({ cantidad: String(q), coste: "", precio: "", plazo: "" }))); setDirty(true); setSavedOk(false); }}>{tr(T.fromUnits, lang)}</button>
+        <button type="button" className="linkbtn" onClick={addCard} disabled={editing != null}>{tr(T.add, lang)}</button>
+        {allNums(pedido.unidades).length > 0 && rows.length === 0 && (
+          <button type="button" className="linkbtn" onClick={() => { setRows(allNums(pedido.unidades).map((q) => emptyRow(String(q)))); setDraft(true); }}>{tr(T.fromUnits, lang)}</button>
         )}
-        <span className="drawer__spacer" />
-        <button type="button" className={"btn btn--primary btn--sm" + (busy ? " btn--busy" : "")} onClick={save} disabled={busy || !dirty}>
-          {busy && <span className="spinner" aria-hidden="true" />}{tr(savedOk && !dirty ? T.saved : T.save, lang)}
-        </button>
       </div>
-      {saveErr && <div className="note note--error" role="alert"><span className="note__tag">ERR</span><span className="note__text">{tr(T.saveErr, lang)}</span></div>}
-
-      {shown.length > 0 && (
-        <div className="tiers__sum">
-          <span className="tiers__sumt">{tr(T.summary, lang)}</span>
-          <div className="tsum">
-            {shown.map((x, i) => (
-              <div key={i} className="tsum__card">
-                <div className="tsum__top">
-                  <span className="tsum__qty">{num(x.q, lang)} <small>uds.</small></span>
-                  <span className="tsum__lead">⏱ {x.plazo || "—"}</span>
-                </div>
-                <div className="tsum__price">
-                  <span className="tsum__k">{tr(T.price, lang)}</span>
-                  <span className="tsum__v">{x.p != null ? money(x.p, lang) : "—"}</span>
-                </div>
-                <dl className="tsum__grid">
-                  <dt>{tr(T.cost, lang)}</dt><dd>{x.c != null ? money(x.c, lang) : "—"}</dd>
-                  <dt>{tr(T.sale, lang)}</dt><dd>{x.venta != null ? money(x.venta, lang) : "—"}</dd>
-                  <dt>{tr(T.costT, lang)}</dt><dd>{x.coste != null ? money(x.coste, lang) : "—"}</dd>
-                  <dt>{tr(T.profit, lang)}</dt><dd className={(x.beneficio ?? 0) < 0 ? "is-neg" : "tiers__profit"}>{x.beneficio != null ? money(x.beneficio, lang) : "—"}</dd>
-                  <dt>{tr(T.margin, lang)}</dt><dd>{x.margen != null ? <span className={mClass(x.margen)}>{pct(x.margen, lang)}</span> : "—"}</dd>
-                </dl>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

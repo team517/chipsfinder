@@ -6,6 +6,8 @@ export type Tr = readonly [string, string];
 export const tr = (t: Tr, lang: Lang) => (lang === "es" ? t[0] : t[1]);
 
 const locale = (lang: Lang) => (lang === "es" ? "es-ES" : "en-GB");
+// Separador de miles siempre (en español, Intl no lo pone en números de 4 cifras: 1000 → 1.000)
+const ALWAYS = { useGrouping: "always" } as unknown as Intl.NumberFormatOptions;
 
 export function money(v: unknown, lang: Lang): string {
   if (v === null || v === undefined || v === "") return "—";
@@ -16,6 +18,7 @@ export function money(v: unknown, lang: Lang): string {
     currency: "EUR",
     minimumFractionDigits: 2,
     maximumFractionDigits: 4,
+    ...ALWAYS,
   }).format(n);
 }
 
@@ -25,7 +28,7 @@ export function moneyCur(v: unknown, cur: string | null | undefined, lang: Lang)
   const n = Number(v);
   if (!Number.isFinite(n)) return "—";
   try {
-    return new Intl.NumberFormat(locale(lang), { style: "currency", currency: cur || "EUR", minimumFractionDigits: 2, maximumFractionDigits: 4 }).format(n);
+    return new Intl.NumberFormat(locale(lang), { style: "currency", currency: cur || "EUR", minimumFractionDigits: 2, maximumFractionDigits: 4, ...ALWAYS }).format(n);
   } catch {
     return n.toFixed(2) + " " + (cur || "EUR");
   }
@@ -34,7 +37,7 @@ export function moneyCur(v: unknown, cur: string | null | undefined, lang: Lang)
 export function num(v: unknown, lang: Lang): string {
   if (v === null || v === undefined || v === "") return "—";
   const n = Number(v);
-  return Number.isFinite(n) ? new Intl.NumberFormat(locale(lang)).format(n) : "—";
+  return Number.isFinite(n) ? new Intl.NumberFormat(locale(lang), ALWAYS).format(n) : "—";
 }
 
 export function date(v: unknown, lang: Lang): string {
