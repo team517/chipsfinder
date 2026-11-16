@@ -2449,3 +2449,27 @@ button.tsum__price:hover { background: color-mix(in srgb, var(--accent) 16%, tra
 .tiers__draft { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-bottom: 12px; padding: 10px 12px; border: 1px dashed var(--warn); border-radius: 6px; font-size: 13px; color: var(--ink-2); }
 .tiers__draft span { flex: 1 1 220px; }
 .tsum { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+
+/* ---------- Pulso Studio (dentro del panel) ---------- */
+.content--frame {
+  padding: 0;
+  display: flex;
+}
+.studio-frame {
+  flex: 1;
+  width: 100%;
+  height: calc(100dvh - 56px);
+  border: 0;
+  display: block;
+  background: #0c0d10;
+  transition: opacity 0.2s ease;
+}
+.studio-down {
+  margin: clamp(24px, 6vw, 72px) auto;
+  max-width: 520px;
+  padding: 0 20px;
+  text-align: center;
+  color: var(--ink-2, inherit);
+}
+.studio-down h2 { margin: 0 0 8px; }
+.studio-down p { margin: 0; line-height: 1.55; }

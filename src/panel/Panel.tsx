@@ -15,6 +15,7 @@ import Referencias from "./Referencias";
 import Tareas, { contarTareas } from "./Tareas";
 import Unibox from "./Unibox";
 import ErrorBoundary from "./ErrorBoundary";
+import StudioFrame from "./StudioFrame";
 import { listUsers } from "./team";
 import { tr, type Tr } from "./format";
 
@@ -37,13 +38,15 @@ const C = {
   seguimiento: ["Seguimiento", "Follow-up"] as Tr,
   tareas: ["Situación y tareas", "Status & tasks"] as Tr,
   openAccount: ["Ver mi cuenta", "View my account"] as Tr,
+  studio: ["Pulso Studio", "Pulso Studio"] as Tr,
 };
 
-type PanelSection = SectionId | "unibox" | "equipo" | "cuenta" | "tareas";
+type PanelSection = SectionId | "unibox" | "equipo" | "cuenta" | "tareas" | "studio";
+type ExtraSection = "unibox" | "equipo" | "cuenta" | "tareas" | "studio";
 
-const EXTRA: Record<"unibox" | "equipo" | "cuenta" | "tareas", Tr> = { unibox: C.unibox, equipo: C.equipo, cuenta: C.account, tareas: C.tareas };
+const EXTRA: Record<ExtraSection, Tr> = { unibox: C.unibox, equipo: C.equipo, cuenta: C.account, tareas: C.tareas, studio: C.studio };
 
-const RECOGNISED: PanelSection[] = ["inicio", "pedidos", "unibox", "referencias", "proveedores", "clientes", "equipo", "cuenta", "tareas"];
+const RECOGNISED: PanelSection[] = ["inicio", "pedidos", "unibox", "referencias", "proveedores", "clientes", "equipo", "cuenta", "tareas", "studio"];
 
 type Route = { section: PanelSection; id: string | null };
 
@@ -52,7 +55,7 @@ const safeDecode = (s: string) => { try { return decodeURIComponent(s); } catch 
 function readRoute(): Route {
   const parts = window.location.pathname.replace(/^\/panel\/?/, "").split("/").filter(Boolean);
   const section = (RECOGNISED as string[]).includes(parts[0] ?? "") ? (parts[0] as PanelSection) : "inicio";
-  const hasId = section !== "inicio" && section !== "cuenta" && section !== "tareas";
+  const hasId = section !== "inicio" && section !== "cuenta" && section !== "tareas" && section !== "studio";
   return { section, id: hasId ? parts[1] ?? null : null };
 }
 
@@ -62,7 +65,7 @@ function routePath(r: Route) {
 }
 
 function sectionTitle(s: PanelSection): Tr {
-  return s === "unibox" || s === "equipo" || s === "cuenta" || s === "tareas" ? EXTRA[s] : SECTION_TITLE[s];
+  return s === "unibox" || s === "equipo" || s === "cuenta" || s === "tareas" || s === "studio" ? EXTRA[s] : SECTION_TITLE[s];
 }
 
 type Counts = Partial<Record<EntityId, number>> & { equipo?: number; unibox?: number; tareas?: number };
@@ -112,7 +115,7 @@ export default function Panel({ session, onSignOut }: { session: Session; onSign
 
   // Quien no es administrador no puede entrar en Equipo
   useEffect(() => {
-    if (route.section === "equipo" && !isAdmin) navigate({ section: "inicio", id: null }, true);
+    if ((route.section === "equipo" || route.section === "studio") && !isAdmin) navigate({ section: "inicio", id: null }, true);
   }, [route.section, isAdmin, navigate]);
 
   // Números del menú lateral
@@ -197,7 +200,10 @@ export default function Panel({ session, onSignOut }: { session: Session; onSign
       {isAdmin && (
         <div className="nav-group">
           <span className="nav-group__label">{tr(C.adminGroup, lang)}</span>
-          <ul>{navItem("equipo", "05", C.equipo, counts.equipo)}</ul>
+          <ul>
+            {navItem("equipo", "05", C.equipo, counts.equipo)}
+            {navItem("studio", "▶", C.studio)}
+          </ul>
         </div>
       )}
       <div className="nav-group">
@@ -295,10 +301,12 @@ export default function Panel({ session, onSignOut }: { session: Session; onSign
           </span>
         </header>
 
-        <main className="content">
+        <main className={"content" + (route.section === "studio" ? " content--frame" : "")}>
           <ErrorBoundary key={route.section === "unibox" ? "unibox" : route.section + "/" + (route.id ?? "")} es={lang === "es"}>
           {route.section === "inicio" ? (
             <Home lang={lang} name={name} refreshKey={refreshKey} go={(section, id) => navigate({ section, id: id ?? null })} />
+          ) : route.section === "studio" ? (
+            isAdmin ? <StudioFrame lang={lang} /> : null
           ) : route.section === "cuenta" ? (
             <Account lang={lang} session={session} />
           ) : route.section === "unibox" ? (
